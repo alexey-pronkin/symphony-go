@@ -1065,29 +1065,26 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp extract_token_delta(running_entry, %{event: _, timestamp: _} = update) do
     running_entry = running_entry || %{}
-    %{usage: usage, mode: mode} = extract_token_usage(update)
+    usage = extract_token_usage(update)
 
     {
       compute_token_delta(
         running_entry,
         :input,
         usage,
-        :codex_last_reported_input_tokens,
-        mode
+        :codex_last_reported_input_tokens
       ),
       compute_token_delta(
         running_entry,
         :output,
         usage,
-        :codex_last_reported_output_tokens,
-        mode
+        :codex_last_reported_output_tokens
       ),
       compute_token_delta(
         running_entry,
         :total,
         usage,
-        :codex_last_reported_total_tokens,
-        mode
+        :codex_last_reported_total_tokens
       )
     }
     |> Tuple.to_list()
@@ -1103,17 +1100,7 @@ defmodule SymphonyElixir.Orchestrator do
     end)
   end
 
-  defp compute_token_delta(running_entry, token_key, usage, reported_key, :delta) do
-    next_delta = get_token_usage(usage, token_key)
-    prev_reported = Map.get(running_entry, reported_key, 0)
-
-    %{
-      delta: if(is_integer(next_delta), do: max(next_delta, 0), else: 0),
-      reported: prev_reported
-    }
-  end
-
-  defp compute_token_delta(running_entry, token_key, usage, reported_key, _mode) do
+  defp compute_token_delta(running_entry, token_key, usage, reported_key) do
     next_total = get_token_usage(usage, token_key)
     prev_reported = Map.get(running_entry, reported_key, 0)
 
@@ -1140,11 +1127,9 @@ defmodule SymphonyElixir.Orchestrator do
       update
     ]
 
-    Enum.find_value(payloads, &preferred_token_usage_from_payload/1) ||
-      case Enum.find_value(payloads, &usage_from_payload/1) do
-        nil -> %{usage: %{}, mode: :absolute}
-        usage -> %{usage: usage, mode: :absolute}
-      end
+    Enum.find_value(payloads, &absolute_token_usage_from_payload/1) ||
+      Enum.find_value(payloads, &turn_completed_usage_from_payload/1) ||
+      %{}
   end
 
   defp extract_rate_limits(update) do
@@ -1156,58 +1141,38 @@ defmodule SymphonyElixir.Orchestrator do
       rate_limits_from_payload(update)
   end
 
-  defp usage_from_payload(payload) when is_map(payload) do
-    case maybe_token_map(payload) do
-      nil ->
-        token_map_payloads(payload)
-
-      token_map ->
-        token_map
-    end
-  end
-
-  defp usage_from_payload(payload) when is_list(payload) do
-    token_map_payloads(payload)
-  end
-
-  defp usage_from_payload(_payload), do: nil
-
-  defp preferred_token_usage_from_payload(payload) when is_map(payload) do
+  defp absolute_token_usage_from_payload(payload) when is_map(payload) do
     absolute_paths = [
       ["params", "msg", "payload", "info", "total_token_usage"],
       [:params, :msg, :payload, :info, :total_token_usage],
       ["params", "msg", "info", "total_token_usage"],
       [:params, :msg, :info, :total_token_usage],
-      ["params", "tokenUsage"],
-      [:params, :tokenUsage],
-      ["params", "usage"],
-      [:params, :usage],
-      ["tokenUsage"],
-      [:tokenUsage],
-      ["usage"],
-      [:usage]
+      ["params", "tokenUsage", "total"],
+      [:params, :tokenUsage, :total],
+      ["tokenUsage", "total"],
+      [:tokenUsage, :total]
     ]
 
-    delta_paths = [
-      ["params", "msg", "info", "last_token_usage"],
-      [:params, :msg, :info, :last_token_usage],
-      ["params", "msg", "payload", "info", "last_token_usage"],
-      [:params, :msg, :payload, :info, :last_token_usage]
-    ]
+    explicit_map_at_paths(payload, absolute_paths)
+  end
 
-    case explicit_map_at_paths(payload, absolute_paths) do
-      %{} = usage ->
-        %{usage: usage, mode: :absolute}
+  defp absolute_token_usage_from_payload(_payload), do: nil
 
-      nil ->
-        case explicit_map_at_paths(payload, delta_paths) do
-          %{} = usage -> %{usage: usage, mode: :delta}
-          nil -> nil
-        end
+  defp turn_completed_usage_from_payload(payload) when is_map(payload) do
+    method = Map.get(payload, "method") || Map.get(payload, :method)
+
+    if method in ["turn/completed", :turn_completed] do
+      direct =
+        Map.get(payload, "usage") ||
+          Map.get(payload, :usage) ||
+          map_at_path(payload, ["params", "usage"]) ||
+          map_at_path(payload, [:params, :usage])
+
+      if is_map(direct) and integer_token_map?(direct), do: direct
     end
   end
 
-  defp preferred_token_usage_from_payload(_payload), do: nil
+  defp turn_completed_usage_from_payload(_payload), do: nil
 
   defp rate_limits_from_payload(payload) when is_map(payload) do
     direct = Map.get(payload, "rate_limits") || Map.get(payload, :rate_limits)
@@ -1229,34 +1194,6 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp rate_limits_from_payload(_payload), do: nil
-
-  defp token_map_payloads(payload) when is_map(payload) do
-    Map.values(payload)
-    |> Enum.reduce_while(nil, fn
-      value, nil ->
-        case usage_from_payload(value) do
-          nil -> {:cont, nil}
-          usage -> {:halt, usage}
-        end
-
-      _value, result ->
-        {:halt, result}
-    end)
-  end
-
-  defp token_map_payloads(payload) when is_list(payload) do
-    payload
-    |> Enum.reduce_while(nil, fn
-      value, nil ->
-        case usage_from_payload(value) do
-          nil -> {:cont, nil}
-          usage -> {:halt, usage}
-        end
-
-      _value, result ->
-        {:halt, result}
-    end)
-  end
 
   defp rate_limit_payloads(payload) when is_map(payload) do
     Map.values(payload)
@@ -1304,12 +1241,6 @@ defmodule SymphonyElixir.Orchestrator do
 
   defp rate_limits_map?(_payload), do: false
 
-  defp maybe_token_map(payload) do
-    if integer_token_map?(payload) do
-      payload
-    end
-  end
-
   defp explicit_map_at_paths(payload, paths) when is_map(payload) and is_list(paths) do
     Enum.find_value(paths, fn path ->
       value = map_at_path(payload, path)
@@ -1339,11 +1270,21 @@ defmodule SymphonyElixir.Orchestrator do
       :total_tokens,
       :prompt_tokens,
       :completion_tokens,
+      :inputTokens,
+      :outputTokens,
+      :totalTokens,
+      :promptTokens,
+      :completionTokens,
       "input_tokens",
       "output_tokens",
       "total_tokens",
       "prompt_tokens",
-      "completion_tokens"
+      "completion_tokens",
+      "inputTokens",
+      "outputTokens",
+      "totalTokens",
+      "promptTokens",
+      "completionTokens"
     ]
 
     token_fields

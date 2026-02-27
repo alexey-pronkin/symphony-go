@@ -1253,10 +1253,8 @@ defmodule SymphonyElixir.StatusDashboard do
 
   defp humanize_codex_method("thread/tokenUsage/updated", payload) do
     usage =
-      map_path(payload, ["params", "usage"]) ||
-        map_path(payload, [:params, :usage]) ||
-        map_path(payload, ["params", "tokenUsage"]) ||
-        map_path(payload, [:params, :tokenUsage]) ||
+      map_path(payload, ["params", "tokenUsage", "total"]) ||
+        map_path(payload, [:params, :tokenUsage, :total]) ||
         map_value(payload, ["usage", :usage])
 
     case format_usage_counts(usage) do
@@ -1520,9 +1518,45 @@ defmodule SymphonyElixir.StatusDashboard do
   end
 
   defp format_usage_counts(usage) when is_map(usage) do
-    input = parse_integer(map_value(usage, ["input_tokens", :input_tokens, "prompt_tokens", :prompt_tokens]))
-    output = parse_integer(map_value(usage, ["output_tokens", :output_tokens, "completion_tokens", :completion_tokens]))
-    total = parse_integer(map_value(usage, ["total_tokens", :total_tokens, "total", :total]))
+    input =
+      parse_integer(
+        map_value(usage, [
+          "input_tokens",
+          :input_tokens,
+          "prompt_tokens",
+          :prompt_tokens,
+          "inputTokens",
+          :inputTokens,
+          "promptTokens",
+          :promptTokens
+        ])
+      )
+
+    output =
+      parse_integer(
+        map_value(usage, [
+          "output_tokens",
+          :output_tokens,
+          "completion_tokens",
+          :completion_tokens,
+          "outputTokens",
+          :outputTokens,
+          "completionTokens",
+          :completionTokens
+        ])
+      )
+
+    total =
+      parse_integer(
+        map_value(usage, [
+          "total_tokens",
+          :total_tokens,
+          "total",
+          :total,
+          "totalTokens",
+          :totalTokens
+        ])
+      )
 
     parts =
       []
@@ -1733,14 +1767,12 @@ defmodule SymphonyElixir.StatusDashboard do
 
   defp token_usage_paths do
     [
-      ["params", "msg", "info", "last_token_usage"],
-      [:params, :msg, :info, :last_token_usage],
-      ["params", "msg", "payload", "info", "last_token_usage"],
-      [:params, :msg, :payload, :info, :last_token_usage],
       ["params", "msg", "payload", "info", "total_token_usage"],
       [:params, :msg, :payload, :info, :total_token_usage],
-      ["params", "msg", "payload", "usage"],
-      [:params, :msg, :payload, :usage]
+      ["params", "msg", "info", "total_token_usage"],
+      [:params, :msg, :info, :total_token_usage],
+      ["params", "tokenUsage", "total"],
+      [:params, :tokenUsage, :total]
     ]
   end
 

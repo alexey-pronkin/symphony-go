@@ -246,10 +246,12 @@ defmodule SymphonyElixir.StatusDashboardSnapshotTest do
       message: %{
         "method" => "thread/tokenUsage/updated",
         "params" => %{
-          "usage" => %{
-            "input_tokens" => input_tokens,
-            "output_tokens" => output_tokens,
-            "total_tokens" => total_tokens
+          "tokenUsage" => %{
+            "total" => %{
+              "inputTokens" => input_tokens,
+              "outputTokens" => output_tokens,
+              "totalTokens" => total_tokens
+            }
           }
         }
       }

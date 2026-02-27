@@ -1297,16 +1297,15 @@ correctness.
 Token accounting rules:
 
 - Agent events may include token counts in multiple payload shapes.
-- Distinguish absolute thread totals from per-event delta payloads.
 - Prefer absolute thread totals when available, such as:
   - `thread/tokenUsage/updated` payloads
   - `total_token_usage` within token-count wrapper events
-- Treat `last_token_usage` as a delta-style fallback only when absolute totals are absent.
+- Ignore delta-style payloads such as `last_token_usage` for dashboard/API totals.
 - Extract input/output/total token counts leniently from common field names within the selected
   payload.
 - For absolute totals, track deltas relative to last reported totals to avoid double-counting.
-- For delta-style fallback payloads, add the reported values directly without rewriting the last
-  reported absolute totals.
+- Do not treat generic `usage` maps as cumulative totals unless the event type defines them that
+  way.
 - Accumulate aggregate totals in orchestrator state.
 
 Runtime accounting:
