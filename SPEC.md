@@ -232,6 +232,8 @@ Fields:
 - `last_reported_input_tokens` (integer)
 - `last_reported_output_tokens` (integer)
 - `last_reported_total_tokens` (integer)
+- `turn_count` (integer)
+  - Number of coding-agent turns started within the current worker lifetime.
 
 #### 4.1.7 Retry Entry
 
@@ -549,6 +551,7 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `hooks.before_remove`: shell script or null
 - `hooks.timeout_ms`: integer, default `60000`
 - `agent.max_concurrent_agents`: integer, default `10`
+- `agent.max_turns`: integer, default `20`
 - `agent.max_retry_backoff_ms`: integer, default `300000` (5m)
 - `agent.max_concurrent_agents_by_state`: map of positive integers, default `{}`
 - `codex.command`: shell command string, default `codex app-server`
@@ -588,8 +591,12 @@ claim state.
 Important nuance:
 
 - A successful worker exit does not mean the issue is done forever.
-- The orchestrator schedules a short continuation retry after every normal exit so it can re-check
-  whether the issue is still active and needs another session.
+- The worker may continue through multiple back-to-back coding-agent turns before it exits.
+- After each normal turn completion, the worker re-checks the tracker issue state.
+- If the issue is still in an active state, the worker should start another turn in the same
+  workspace, up to `agent.max_turns`.
+- Once the worker exits normally, the orchestrator still schedules a short continuation retry so it
+  can re-check whether the issue remains active and needs another worker session.
 
 ### 7.2 Run Attempt Lifecycle
 
@@ -620,7 +627,8 @@ Distinct terminal reasons are important because retry logic and logs differ.
 - `Worker Exit (normal)`
   - Remove running entry.
   - Update aggregate runtime totals.
-  - Schedule continuation retry (attempt `1`).
+  - Schedule continuation retry (attempt `1`) after the worker exhausts or finishes its in-process
+    turn loop.
 
 - `Worker Exit (abnormal)`
   - Remove running entry.
@@ -1250,6 +1258,7 @@ If the implementation exposes a synchronous runtime snapshot (for dashboards or 
 should return:
 
 - `running` (list of running session rows)
+- each running row should include `turn_count`
 - `retrying` (list of retry queue rows)
 - `codex_totals`
   - `input_tokens`
@@ -1361,6 +1370,7 @@ Minimum endpoints:
           "issue_identifier": "MT-649",
           "state": "In Progress",
           "session_id": "thread-1-turn-1",
+          "turn_count": 7,
           "last_event": "turn_completed",
           "last_message": "",
           "started_at": "2026-02-24T20:10:12Z",
@@ -1410,6 +1420,7 @@ Minimum endpoints:
       },
       "running": {
         "session_id": "thread-1-turn-1",
+        "turn_count": 7,
         "state": "In Progress",
         "started_at": "2026-02-24T20:10:12Z",
         "last_event": "notification",
@@ -1738,21 +1749,42 @@ function run_agent_attempt(issue, attempt, orchestrator_channel):
   if run_hook("before_run", workspace.path) failed:
     fail_worker("before_run hook error")
 
-  prompt = render_prompt(workflow_template, issue, attempt)
-  if prompt failed:
-    fail_worker("prompt error")
+  max_turns = config.agent.max_turns
+  turn_number = 1
 
-  session_result = app_server.run(
-    workspace=workspace.path,
-    prompt=prompt,
-    issue=issue,
-    on_message=(msg) -> send(orchestrator_channel, {codex_update, issue.id, msg})
-  )
+  while true:
+    prompt = build_turn_prompt(workflow_template, issue, attempt, turn_number, max_turns)
+    if prompt failed:
+      run_hook_best_effort("after_run", workspace.path)
+      fail_worker("prompt error")
+
+    session_result = app_server.run(
+      workspace=workspace.path,
+      prompt=prompt,
+      issue=issue,
+      on_message=(msg) -> send(orchestrator_channel, {codex_update, issue.id, msg})
+    )
+
+    if session_result failed:
+      run_hook_best_effort("after_run", workspace.path)
+      fail_worker("agent session error")
+
+    refreshed_issue = tracker.fetch_issue_states_by_ids([issue.id])
+    if refreshed_issue failed:
+      run_hook_best_effort("after_run", workspace.path)
+      fail_worker("issue state refresh error")
+
+    issue = refreshed_issue[0] or issue
+
+    if issue.state is not active:
+      break
+
+    if turn_number >= max_turns:
+      break
+
+    turn_number = turn_number + 1
 
   run_hook_best_effort("after_run", workspace.path)
-
-  if session_result failed:
-    fail_worker("agent session error")
 
   exit_normal()
 ```
