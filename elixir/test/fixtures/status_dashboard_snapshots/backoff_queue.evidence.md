@@ -9,9 +9,9 @@
 │ Next refresh: n/a
 ├─ Running
 │
-│   ID       STAGE          PID      AGE     TOKENS     SESSION        EVENT                                       
+│   ID       STAGE          PID      AGE          TOKENS     SESSION        EVENT                                  
 │   ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-│ ● MT-638   retrying       4242     20m 25s     14,200 thre...567890  agent message streaming: waiting on rate-...
+│ ● MT-638   retrying       4242     20m 25s / 7      14,200 thre...567890  agent message streaming: waiting on ...
 ├─ Backoff queue
 │
 │  ↻ MT-450 attempt=4 in 1.250s error=rate limit exhausted

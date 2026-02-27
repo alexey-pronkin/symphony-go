@@ -51,6 +51,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
       identifier: issue.identifier,
       issue: issue,
       session_id: nil,
+      turn_count: 0,
       last_codex_message: nil,
       last_codex_timestamp: nil,
       last_codex_event: nil,
@@ -70,8 +71,17 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
       pid,
       {:codex_worker_update, issue_id,
        %{
-         event: :notification,
+         event: :session_started,
          session_id: "thread-live-turn-live",
+         timestamp: now
+       }}
+    )
+
+    send(
+      pid,
+      {:codex_worker_update, issue_id,
+       %{
+         event: :notification,
          payload: %{method: "some-event"},
          timestamp: now
        }}
@@ -81,6 +91,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert %{running: [snapshot_entry]} = snapshot
     assert snapshot_entry.issue_id == issue_id
     assert snapshot_entry.session_id == "thread-live-turn-live"
+    assert snapshot_entry.turn_count == 1
     assert snapshot_entry.last_codex_timestamp == now
 
     assert snapshot_entry.last_codex_message == %{
@@ -121,6 +132,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
       identifier: issue.identifier,
       issue: issue,
       session_id: nil,
+      turn_count: 0,
       last_codex_message: nil,
       last_codex_timestamp: nil,
       last_codex_event: nil,
@@ -145,6 +157,16 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
       pid,
       {:codex_worker_update, issue_id,
        %{
+         event: :session_started,
+         session_id: "thread-usage-turn-usage",
+         timestamp: now
+       }}
+    )
+
+    send(
+      pid,
+      {:codex_worker_update, issue_id,
+       %{
          event: :turn_completed,
          payload: %{
            method: "turn/completed",
@@ -161,6 +183,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert snapshot_entry.codex_input_tokens == 12
     assert snapshot_entry.codex_output_tokens == 4
     assert snapshot_entry.codex_total_tokens == 16
+    assert snapshot_entry.turn_count == 1
     assert is_integer(snapshot_entry.runtime_seconds)
 
     send(pid, {:DOWN, process_ref, :process, self(), :normal})

@@ -304,6 +304,7 @@ defmodule SymphonyElixir.ExtensionsTest do
       identifier: "MT-HTTP",
       issue: %Issue{id: "issue-http", identifier: "MT-HTTP", state: "In Progress"},
       session_id: "thread-http",
+      turn_count: 7,
       codex_app_server_pid: nil,
       last_codex_message: "rendered",
       last_codex_timestamp: nil,
@@ -343,7 +344,7 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     assert %{
              "counts" => %{"running" => 1, "retrying" => 1},
-             "running" => [%{"issue_identifier" => "MT-HTTP", "last_message" => "rendered"}],
+             "running" => [%{"issue_identifier" => "MT-HTTP", "last_message" => "rendered", "turn_count" => 7}],
              "retrying" => [%{"issue_identifier" => "MT-RETRY", "error" => "boom"}]
            } = Jason.decode!(body)
 
@@ -357,7 +358,7 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert %{
              "issue_identifier" => "MT-HTTP",
              "status" => "running",
-             "running" => %{"last_message" => "structured"},
+             "running" => %{"last_message" => "structured", "turn_count" => 7},
              "retry" => nil
            } = Jason.decode!(body)
 

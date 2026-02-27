@@ -348,6 +348,7 @@ defmodule SymphonyElixir.HttpServer do
       issue_identifier: entry.identifier,
       state: entry.state,
       session_id: entry.session_id,
+      turn_count: Map.get(entry, :turn_count, 0),
       last_event: entry.last_codex_event,
       last_message: summarize_message(entry.last_codex_message),
       started_at: iso8601(entry.started_at),
@@ -373,6 +374,7 @@ defmodule SymphonyElixir.HttpServer do
   defp running_issue_payload(running) do
     %{
       session_id: running.session_id,
+      turn_count: Map.get(running, :turn_count, 0),
       state: running.state,
       started_at: iso8601(running.started_at),
       last_event: running.last_codex_event,

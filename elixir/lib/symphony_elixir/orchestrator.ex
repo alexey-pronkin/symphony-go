@@ -555,6 +555,7 @@ defmodule SymphonyElixir.Orchestrator do
             codex_last_reported_input_tokens: 0,
             codex_last_reported_output_tokens: 0,
             codex_last_reported_total_tokens: 0,
+            turn_count: 0,
             retry_attempt: normalize_retry_attempt(attempt),
             started_at: DateTime.utc_now()
           })
@@ -823,6 +824,7 @@ defmodule SymphonyElixir.Orchestrator do
           codex_input_tokens: metadata.codex_input_tokens,
           codex_output_tokens: metadata.codex_output_tokens,
           codex_total_tokens: metadata.codex_total_tokens,
+          turn_count: Map.get(metadata, :turn_count, 0),
           started_at: metadata.started_at,
           last_codex_timestamp: metadata.last_codex_timestamp,
           last_codex_message: metadata.last_codex_message,
@@ -884,6 +886,7 @@ defmodule SymphonyElixir.Orchestrator do
     last_reported_input = Map.get(running_entry, :codex_last_reported_input_tokens, 0)
     last_reported_output = Map.get(running_entry, :codex_last_reported_output_tokens, 0)
     last_reported_total = Map.get(running_entry, :codex_last_reported_total_tokens, 0)
+    turn_count = Map.get(running_entry, :turn_count, 0)
 
     {
       Map.merge(running_entry, %{
@@ -897,7 +900,8 @@ defmodule SymphonyElixir.Orchestrator do
         codex_total_tokens: codex_total_tokens + token_delta.total_tokens,
         codex_last_reported_input_tokens: max(last_reported_input, token_delta.input_reported),
         codex_last_reported_output_tokens: max(last_reported_output, token_delta.output_reported),
-        codex_last_reported_total_tokens: max(last_reported_total, token_delta.total_reported)
+        codex_last_reported_total_tokens: max(last_reported_total, token_delta.total_reported),
+        turn_count: turn_count_for_update(turn_count, running_entry.session_id, update)
       }),
       token_delta
     }
@@ -918,6 +922,21 @@ defmodule SymphonyElixir.Orchestrator do
     do: session_id
 
   defp session_id_for_update(existing, _update), do: existing
+
+  defp turn_count_for_update(existing_count, existing_session_id, %{event: :session_started, session_id: session_id})
+       when is_integer(existing_count) and is_binary(session_id) do
+    if session_id == existing_session_id do
+      existing_count
+    else
+      existing_count + 1
+    end
+  end
+
+  defp turn_count_for_update(existing_count, _existing_session_id, _update)
+       when is_integer(existing_count),
+       do: existing_count
+
+  defp turn_count_for_update(_existing_count, _existing_session_id, _update), do: 0
 
   defp summarize_codex_update(update) do
     %{

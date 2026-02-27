@@ -24,6 +24,7 @@ defmodule SymphonyElixir.Config do
   @default_workspace_root Path.join(System.tmp_dir!(), "symphony_workspaces")
   @default_hook_timeout_ms 60_000
   @default_max_concurrent_agents 10
+  @default_agent_max_turns 20
   @default_max_retry_backoff_ms 300_000
   @default_codex_command "codex app-server"
   @default_server_host "127.0.0.1"
@@ -122,6 +123,17 @@ defmodule SymphonyElixir.Config do
 
       _ ->
         @default_max_retry_backoff_ms
+    end
+  end
+
+  @spec agent_max_turns() :: pos_integer()
+  def agent_max_turns do
+    case fetch_integer([["agent", "max_turns"]], @default_agent_max_turns) do
+      max_turns when is_integer(max_turns) and max_turns > 0 ->
+        max_turns
+
+      _ ->
+        @default_agent_max_turns
     end
   end
 

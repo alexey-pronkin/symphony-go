@@ -27,6 +27,7 @@ hooks:
     cd elixir && mise exec -- mix workspace.before_remove
 agent:
   max_concurrent_agents: 10
+  max_turns: 20
 codex:
   command: codex --sandbox danger-full-access --ask-for-approval never --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
 ---
