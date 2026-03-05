@@ -34,6 +34,8 @@ codex:
   thread_sandbox: "danger-full-access"
   turn_sandbox_policy:
     type: dangerFullAccess
+server:
+  port: 31335
 ---
 
 You are working on a Linear ticket `{{ issue.identifier }}`
