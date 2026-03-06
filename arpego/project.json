@@ -1,0 +1,40 @@
+{
+  "name": "arpego",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "root": "arpego",
+  "sourceRoot": "arpego",
+  "targets": {
+    "build": {
+      "command": "make -C .. format-check-go lint-go",
+      "options": {
+        "cwd": "arpego"
+      }
+    },
+    "lint": {
+      "command": "make -C .. lint-go",
+      "options": {
+        "cwd": "arpego"
+      }
+    },
+    "test": {
+      "command": "cd arpego && go test ./...",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "format": {
+      "command": "make -C .. format-go",
+      "options": {
+        "cwd": "arpego"
+      }
+    },
+    "format-check": {
+      "command": "make -C .. format-check-go",
+      "options": {
+        "cwd": "arpego"
+      }
+    }
+  },
+  "tags": ["stack:go", "scope:backend"]
+}

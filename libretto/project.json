@@ -1,0 +1,46 @@
+{
+  "name": "libretto",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "root": "libretto",
+  "sourceRoot": "libretto/src",
+  "targets": {
+    "build": {
+      "command": "npm --prefix libretto run build",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "lint": {
+      "command": "npm --prefix libretto run lint",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "test": {
+      "command": "npm --prefix libretto run test",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "format": {
+      "command": "npm --prefix libretto run format",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "format-check": {
+      "command": "npm --prefix libretto run format:check",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "serve": {
+      "command": "npm --prefix libretto run dev",
+      "options": {
+        "cwd": "."
+      }
+    }
+  },
+  "tags": ["stack:web", "scope:frontend"]
+}

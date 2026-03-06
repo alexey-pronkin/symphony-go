@@ -1,0 +1,17 @@
+{
+  "name": "symphony-go",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "nx": "nx",
+    "graph": "nx graph",
+    "build": "nx run-many -t build",
+    "lint": "nx run-many -t lint",
+    "test": "nx run-many -t test",
+    "format": "nx run-many -t format",
+    "format:check": "nx run-many -t format-check"
+  },
+  "devDependencies": {
+    "nx": "^22.5.4"
+  }
+}

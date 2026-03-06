@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if grep -Eq '^(arpego/.*\.go|arpego/go\.(mod|sum)|\.golangci\.yml)$' <<<"$STAGED"; then
+  make format-go
+  make lint-go
+  git add arpego .golangci.yml
+fi
+
+if grep -Eq '^(libretto/|\.prettier(rc\.json|ignore)|\.editorconfig)' <<<"$STAGED"; then
+  make format-frontend
+  make lint-frontend
+  git add libretto .prettierrc.json .prettierignore .editorconfig
+fi
+
+if grep -Eq '^(scripts/|\.editorconfig)' <<<"$STAGED"; then
+  make format-python
+  make lint-python
+  git add scripts .editorconfig
+fi
