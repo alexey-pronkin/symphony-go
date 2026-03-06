@@ -1,0 +1,15 @@
+.mcp.json
+.nx
+.cache
+.DS_Store
+.ruff_cache
+.pytest_cache
+.venv
+node_modules
+dist
+coverage
+.env
+.claude/settings.local.json
+infra/secrets/*.txt
+!infra/secrets/*.example.txt
+trivy-results*.sarif

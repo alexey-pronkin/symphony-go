@@ -1,0 +1,53 @@
+schema: spec-driven
+
+context: |
+  Project: Symphony
+  Primary contract: SPEC.md defines the language-agnostic service behavior.
+  Current implementation direction:
+  - backend: Go
+  - scripting: Python via uv
+  - frontend: Vite + React
+  Implementation roots:
+  - arpego/: Go backend
+  - libretto/: Vite + React frontend
+  - scripts/: Python automation
+  Legacy reference implementation: elixir/ remains useful historical/reference context and inspiration, but it is not the target stack.
+
+  Domain summary:
+  - Symphony polls Linear, creates isolated per-issue workspaces, and runs coding agents inside those workspaces.
+  - WORKFLOW.md is the repo-owned contract for prompt content and runtime behavior.
+  - Core concerns are orchestration state, workspace safety, retry/reconciliation behavior, dynamic workflow reload, and operator observability.
+
+  Working conventions:
+  - OpenSpec philosophy here is fluid not rigid, iterative not waterfall, easy not complex, built for brownfield not just greenfield, and scalable from personal projects to enterprises.
+  - Use the default OpenSpec flow: /opsx:propose -> /opsx:apply -> /opsx:archive.
+  - Treat OpenSpec artifacts as the primary scoped context for implementation.
+  - Keep implementation behavior aligned with SPEC.md.
+  - Implementation may be a superset of the spec, but must not conflict with it.
+  - If a change materially affects behavior, update the spec and nearby docs in the same change where practical.
+  - Treat arpego/, libretto/, and scripts/ as the default implementation roots for new work.
+  - If work touches elixir/, also follow elixir/AGENTS.md, but use it as reference or explicit maintenance scope only.
+  - Keep changes narrowly scoped and preserve concurrency-sensitive semantics.
+  - basic-memory is the current source of truth for durable project memory.
+  - Use Markdown with YAML front matter for filterable metadata in specs and durable notes.
+  - Use Mermaid for most diagrams and PlantUML when UML detail is needed.
+  - Optimize for token and cache efficiency: retrieve narrow context by metadata instead of loading broad documents.
+  - Design specs so agents can filter by language, framework, component, and service.
+
+rules:
+  proposal:
+    - State the user-visible or operator-visible problem first.
+    - Call out any impact on SPEC.md, WORKFLOW.md, or runtime config.
+    - Include explicit non-goals when the scope could drift.
+    - State which target stack areas are affected: Go backend, uv Python scripting, Vite React frontend, or cross-cutting.
+  design:
+    - Describe how the change affects orchestration, workspace isolation, tracker integration, and Codex execution.
+    - Call out reload, retry, reconciliation, and cleanup effects when relevant.
+    - Identify safety or trust-boundary implications for new hooks, tools, or credentials.
+    - Use Mermaid or PlantUML when a diagram is the clearest way to explain the design.
+    - Include retrieval implications when new specs, memory notes, or indexing metadata are introduced.
+  tasks:
+    - Include docs updates when behavior or configuration changes.
+    - Include validation steps that match the touched area.
+    - Keep tasks ordered, concrete, and small enough to implement incrementally.
+    - Keep implementation tasks separated by stack when that reduces context size.

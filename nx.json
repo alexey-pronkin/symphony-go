@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": [
+      "default",
+      "!{projectRoot}/**/*.test.*",
+      "!{projectRoot}/**/*.spec.*",
+      "!{projectRoot}/dist/**"
+    ],
+    "sharedGlobals": [
+      "{workspaceRoot}/.editorconfig",
+      "{workspaceRoot}/.prettierrc.json",
+      "{workspaceRoot}/.prettierignore",
+      "{workspaceRoot}/.golangci.yml",
+      "{workspaceRoot}/Makefile"
+    ]
+  },
+  "targetDefaults": {
+    "build": {
+      "inputs": ["production", "^production"],
+      "cache": true
+    },
+    "lint": {
+      "inputs": ["default", "^default"],
+      "cache": true
+    },
+    "test": {
+      "inputs": ["default", "^default"],
+      "cache": true
+    },
+    "format": {
+      "inputs": ["default"],
+      "cache": false
+    },
+    "format-check": {
+      "inputs": ["default"],
+      "cache": true
+    }
+  },
+  "defaultBase": "main"
+}

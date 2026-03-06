@@ -1,0 +1,27 @@
+api:
+  dashboard: true
+
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: symphony_edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+accessLog:
+  filePath: /var/log/traefik/access.log
+  format: json
+
+log:
+  level: INFO
+
+experimental:
+  plugins:
+    bouncer:
+      moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      version: v1.4.5

@@ -1,0 +1,82 @@
+services:
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    command:
+      - --configFile=/etc/traefik/traefik.yaml
+    ports:
+      - "80:80"
+    secrets:
+      - crowdsec_lapi_key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-logs:/var/log/traefik
+      - ./infra/traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=symphony_edge
+      - traefik.http.routers.traefik.rule=Host(`${TRAEFIK_HOST:-traefik.localhost}`)
+      - traefik.http.routers.traefik.entrypoints=web
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.middlewares=crowdsec@file
+    networks:
+      - edge
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.7.0
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: >-
+        crowdsecurity/traefik
+        crowdsecurity/http-cve
+        crowdsecurity/appsec-virtual-patching
+        crowdsecurity/appsec-generic-rules
+      BOUNCER_KEY_TRAEFIK: ${CROWDSEC_LAPI_KEY:?set CROWDSEC_LAPI_KEY in .env}
+    volumes:
+      - crowdsec-db:/var/lib/crowdsec/data
+      - traefik-logs:/var/log/traefik:ro
+      - ./infra/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - ./infra/crowdsec/acquis.d/appsec.yaml:/etc/crowdsec/acquis.d/appsec.yaml:ro
+    networks:
+      - edge
+
+  arpego:
+    build:
+      context: ./arpego
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=symphony_edge
+      - traefik.http.routers.arpego.rule=Host(`${API_HOST:-api.localhost}`)
+      - traefik.http.routers.arpego.entrypoints=web
+      - traefik.http.routers.arpego.middlewares=crowdsec@file
+      - traefik.http.services.arpego.loadbalancer.server.port=8080
+    networks:
+      - edge
+
+  libretto:
+    build:
+      context: ./libretto
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=symphony_edge
+      - traefik.http.routers.libretto.rule=Host(`${APP_HOST:-app.localhost}`)
+      - traefik.http.routers.libretto.entrypoints=web
+      - traefik.http.routers.libretto.middlewares=crowdsec@file
+      - traefik.http.services.libretto.loadbalancer.server.port=80
+    networks:
+      - edge
+
+networks:
+  edge:
+    name: symphony_edge
+
+volumes:
+  crowdsec-db:
+  traefik-logs:
+
+secrets:
+  crowdsec_lapi_key:
+    file: ./infra/secrets/crowdsec_lapi_key.txt

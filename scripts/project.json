@@ -1,0 +1,40 @@
+{
+  "name": "scripts",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "root": "scripts",
+  "sourceRoot": "scripts",
+  "targets": {
+    "build": {
+      "command": "cd scripts && uv build",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "lint": {
+      "command": "make -C .. lint-python",
+      "options": {
+        "cwd": "scripts"
+      }
+    },
+    "test": {
+      "command": "cd scripts && uv run python -m pytest",
+      "options": {
+        "cwd": "."
+      }
+    },
+    "format": {
+      "command": "make -C .. format-python",
+      "options": {
+        "cwd": "scripts"
+      }
+    },
+    "format-check": {
+      "command": "make -C .. format-check-python",
+      "options": {
+        "cwd": "scripts"
+      }
+    }
+  },
+  "tags": ["stack:python", "scope:tooling"]
+}

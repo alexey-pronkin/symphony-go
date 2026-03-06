@@ -1,0 +1,16 @@
+cache-dir: .cache/trivy
+format: table
+exit-code: 1
+ignore-unfixed: true
+severity:
+  - HIGH
+  - CRITICAL
+scanners:
+  - vuln
+  - secret
+skip-dirs:
+  - .git
+  - .nx
+  - node_modules
+  - dist
+  - coverage
