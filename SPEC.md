@@ -395,6 +395,10 @@ Fields:
     - `name`: human-readable source label
     - `repo_path`: local repository path used for inspection
     - `main_branch`: branch used as the merge baseline, default `main`
+    - `api_url`: optional provider API base URL override
+    - `repository`: optional forge repository slug for GitHub/GitVerse-style providers
+    - `project_id`: optional project identifier for GitLab-style providers
+    - `api_token`: optional provider token or `$VAR`
 - `stale_branch_hours` (integer or string integer)
   - Default: `72`
   - Used by delivery metrics to classify stale branches.
@@ -1585,7 +1589,11 @@ Minimum endpoints:
           "stale_branches": 1,
           "drift_commits": 4,
           "ahead_commits": 3,
-          "max_age_hours": 96.0
+          "max_age_hours": 96.0,
+          "open_change_requests": 2,
+          "approved_change_requests": 1,
+          "failing_change_requests": 1,
+          "stale_change_requests": 1
         }
       },
       "warnings": ["scm metrics degraded: no SCM sources configured"]

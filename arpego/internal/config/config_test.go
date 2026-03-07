@@ -130,17 +130,22 @@ func TestTrackerStorage_DefaultsToFileForLocal(t *testing.T) {
 
 func TestInsightsSCMSources_NormalizesAndExpands(t *testing.T) {
 	home, _ := os.UserHomeDir()
+	t.Setenv("SCM_TOKEN", "secret-token")
 	c := cfg(map[string]any{
 		"insights": nested("scm_sources", []any{
 			map[string]any{
 				"kind":        "GitHub",
 				"repo_path":   "~/work/symphony",
 				"main_branch": "",
+				"repository":  "org/symphony",
+				"api_url":     "https://api.github.example",
+				"api_token":   "$SCM_TOKEN",
 			},
 			map[string]any{
-				"kind":      "gitlab",
-				"name":      "internal",
-				"repo_path": "/srv/git/internal",
+				"kind":       "gitlab",
+				"name":       "internal",
+				"repo_path":  "/srv/git/internal",
+				"project_id": "group%2Fproject",
 			},
 		}),
 	})
@@ -158,8 +163,20 @@ func TestInsightsSCMSources_NormalizesAndExpands(t *testing.T) {
 	if sources[0].MainBranch != "main" {
 		t.Fatalf("first main branch = %q want main", sources[0].MainBranch)
 	}
+	if sources[0].Repository != "org/symphony" {
+		t.Fatalf("first repository = %q", sources[0].Repository)
+	}
+	if sources[0].APIURL != "https://api.github.example" {
+		t.Fatalf("first api url = %q", sources[0].APIURL)
+	}
+	if sources[0].APIToken != "secret-token" {
+		t.Fatalf("first api token = %q", sources[0].APIToken)
+	}
 	if sources[1].Name != "internal" {
 		t.Fatalf("second name = %q want internal", sources[1].Name)
+	}
+	if sources[1].ProjectID != "group%2Fproject" {
+		t.Fatalf("second project id = %q", sources[1].ProjectID)
 	}
 }
 

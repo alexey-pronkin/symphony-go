@@ -19,14 +19,14 @@ type RuntimeProvider interface {
 	Snapshot() orchestrator.Snapshot
 }
 
-type GitInspector interface {
+type SCMInspector interface {
 	Inspect(context.Context, SourceConfig, time.Duration, time.Time) (SCMSourceMetrics, error)
 }
 
 type Service struct {
 	tasks            TaskProvider
 	runtime          RuntimeProvider
-	inspector        GitInspector
+	inspector        SCMInspector
 	sources          []SourceConfig
 	now              func() time.Time
 	staleAfter       time.Duration
@@ -36,7 +36,7 @@ type Service struct {
 type Options struct {
 	Tasks            TaskProvider
 	Runtime          RuntimeProvider
-	Inspector        GitInspector
+	Inspector        SCMInspector
 	Sources          []SourceConfig
 	Now              func() time.Time
 	StaleAfter       time.Duration
@@ -50,7 +50,7 @@ func NewService(opts Options) *Service {
 	}
 	inspector := opts.Inspector
 	if inspector == nil {
-		inspector = GitGoInspector{}
+		inspector = DefaultInspector{}
 	}
 	staleAfter := opts.StaleAfter
 	if staleAfter <= 0 {
@@ -178,6 +178,8 @@ func (s *Service) buildSCMMetrics(ctx context.Context, now time.Time) (SCMMetric
 				Name:       source.Name,
 				RepoPath:   source.RepoPath,
 				MainBranch: source.MainBranch,
+				Repository: source.Repository,
+				ProjectID:  source.ProjectID,
 				Warnings:   []string{err.Error()},
 			})
 			continue
@@ -189,6 +191,10 @@ func (s *Service) buildSCMMetrics(ctx context.Context, now time.Time) (SCMMetric
 		out.Totals.StaleBranches += metrics.StaleBranches
 		out.Totals.DriftCommits += metrics.DriftCommits
 		out.Totals.AheadCommits += metrics.AheadCommits
+		out.Totals.OpenChangeRequests += metrics.OpenChangeRequests
+		out.Totals.ApprovedChangeRequests += metrics.ApprovedChangeRequests
+		out.Totals.FailingChangeRequests += metrics.FailingChangeRequests
+		out.Totals.StaleChangeRequests += metrics.StaleChangeRequests
 		if metrics.MaxAgeHours > out.Totals.MaxAgeHours {
 			out.Totals.MaxAgeHours = metrics.MaxAgeHours
 		}
@@ -206,11 +212,19 @@ func buildSummary(trackerMetrics TrackerMetrics, scmMetrics SCMMetrics) Delivery
 	mergeScore := 100
 	if scmMetrics.ActiveSources > 0 {
 		branchBase := maxInt(scmMetrics.Totals.Branches, 1)
+		changeBase := maxInt(scmMetrics.Totals.OpenChangeRequests, 1)
+		branchComponent := 0.40*(1-ratio(scmMetrics.Totals.DriftCommits, maxInt(branchBase*8, 1))) +
+			0.35*(1-ratio(scmMetrics.Totals.StaleBranches, branchBase)) +
+			0.25*(1-ratio(scmMetrics.Totals.UnmergedBranches, branchBase))
+		reviewComponent := 1.0
+		if scmMetrics.Totals.OpenChangeRequests > 0 {
+			reviewComponent =
+				0.40*(1-ratio(scmMetrics.Totals.FailingChangeRequests, changeBase)) +
+					0.35*ratio(scmMetrics.Totals.ApprovedChangeRequests, changeBase) +
+					0.25*(1-ratio(scmMetrics.Totals.StaleChangeRequests, changeBase))
+		}
 		mergeScore = clampScore(
-			100 *
-				(0.40*(1-ratio(scmMetrics.Totals.DriftCommits, maxInt(branchBase*8, 1))) +
-					0.35*(1-ratio(scmMetrics.Totals.StaleBranches, branchBase)) +
-					0.25*(1-ratio(scmMetrics.Totals.UnmergedBranches, branchBase))),
+			100 * (0.55*branchComponent + 0.45*reviewComponent),
 		)
 	}
 	predictabilityScore := clampScore(
@@ -248,8 +262,9 @@ func buildSummary(trackerMetrics TrackerMetrics, scmMetrics SCMMetrics) Delivery
 			"Merge readiness",
 			mergeScore,
 			fmt.Sprintf(
-				"%d unmerged branches, %d drift commits.",
-				scmMetrics.Totals.UnmergedBranches,
+				"%d open changes, %d failing, %d drift commits.",
+				scmMetrics.Totals.OpenChangeRequests,
+				scmMetrics.Totals.FailingChangeRequests,
 				scmMetrics.Totals.DriftCommits,
 			),
 		),

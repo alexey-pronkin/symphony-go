@@ -115,6 +115,10 @@ func buildDeliveryInsights(
 			Name:       source.Name,
 			RepoPath:   source.RepoPath,
 			MainBranch: source.MainBranch,
+			APIURL:     source.APIURL,
+			Repository: source.Repository,
+			ProjectID:  source.ProjectID,
+			APIToken:   source.APIToken,
 		})
 	}
 	return insights.NewService(insights.Options{

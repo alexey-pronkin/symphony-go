@@ -105,6 +105,64 @@ func TestServiceWarnsWhenSCMSourcesMissing(t *testing.T) {
 	}
 }
 
+func TestServiceAggregatesProviderChangeRequestTotals(t *testing.T) {
+	service := NewService(Options{
+		Inspector: fakeInspector{
+			metrics: SCMSourceMetrics{
+				Kind:                   "github",
+				Name:                   "origin",
+				OpenChangeRequests:     3,
+				ApprovedChangeRequests: 2,
+				FailingChangeRequests:  1,
+				StaleChangeRequests:    1,
+			},
+		},
+		Sources: []SourceConfig{{
+			Kind:       "github",
+			Name:       "origin",
+			Repository: "org/repo",
+		}},
+		Now: nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	report, err := service.Delivery(context.Background())
+	if err != nil {
+		t.Fatalf("Delivery: %v", err)
+	}
+	if report.SCM.Totals.OpenChangeRequests != 3 {
+		t.Fatalf("open change requests = %d want 3", report.SCM.Totals.OpenChangeRequests)
+	}
+	if report.SCM.Totals.ApprovedChangeRequests != 2 {
+		t.Fatalf("approved change requests = %d want 2", report.SCM.Totals.ApprovedChangeRequests)
+	}
+	if report.Summary.MergeReadiness.Score <= 0 {
+		t.Fatalf("merge readiness score = %d", report.Summary.MergeReadiness.Score)
+	}
+}
+
+func TestServiceDegradesWhenProviderSourceFails(t *testing.T) {
+	service := NewService(Options{
+		Inspector: fakeInspector{err: context.DeadlineExceeded},
+		Sources: []SourceConfig{{
+			Kind:       "gitverse",
+			Name:       "gitverse",
+			Repository: "team/repo",
+		}},
+		Now: nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	report, err := service.Delivery(context.Background())
+	if err != nil {
+		t.Fatalf("Delivery: %v", err)
+	}
+	if len(report.Warnings) == 0 {
+		t.Fatal("expected warnings")
+	}
+	if len(report.SCM.Sources) != 1 || len(report.SCM.Sources[0].Warnings) == 0 {
+		t.Fatalf("source warnings = %#v", report.SCM.Sources)
+	}
+}
+
 type fakeTaskProvider struct {
 	tasks []tracker.Issue
 }
