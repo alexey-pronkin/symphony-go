@@ -379,6 +379,10 @@ Fields:
   - Used by `tracker.kind == "local"` with `tracker.storage == "postgres"`.
   - Implementations may also support a canonical environment variable such as
     `SYMPHONY_POSTGRES_DSN`.
+- `clickhouse_dsn` (string or `$VAR_NAME`)
+  - Optional runtime-event and observability store extension.
+  - Implementations may also support a canonical environment variable such as
+    `SYMPHONY_CLICKHOUSE_DSN`.
 
 #### 5.3.8 `insights` (object, optional extension)
 
@@ -593,6 +597,8 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.storage`: string, optional extension for `tracker.kind=local`, default `file`
 - `tracker.file`: path, optional extension for `tracker.kind=local`
 - `storage.postgres_dsn`: string or `$VAR`, optional extension for local Postgres storage
+- `storage.clickhouse_dsn`: string or `$VAR`, optional extension for ClickHouse-backed runtime
+  event retention and debug reads
 - `insights.scm_sources`: list of SCM source objects for delivery metrics
 - `insights.stale_branch_hours`: integer, default `72`
 - `insights.throughput_window_days`: integer, default `7`

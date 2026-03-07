@@ -6,8 +6,8 @@
 
 ## 2. Analytics And Observability
 
-- [ ] 2.1 Add failing backend tests for ClickHouse-backed runtime event writes and issue debug/event queries
-- [ ] 2.2 Introduce the ClickHouse adapter for runtime events and observability reads
+- [x] 2.1 Add failing backend tests for ClickHouse-backed runtime event writes and issue debug/event queries
+- [x] 2.2 Introduce the ClickHouse adapter for runtime events and observability reads
 - [x] 2.3 Add Prometheus metrics endpoints and Docker Compose services for Prometheus/Grafana under `--profile monitoring`
 
 ## 3. Continuation And Debug Runtime
@@ -18,7 +18,7 @@
 
 ## 4. Libretto Task Platform
 
-- [ ] 4.1 Add failing frontend tests for task list loading, task creation, task state updates, and degraded-observability handling
+- [x] 4.1 Add failing frontend tests for task list loading, task creation, task state updates, and degraded-observability handling
 - [x] 4.2 Extend the typed client with task platform and observability endpoints
 - [x] 4.3 Implement a simple task platform UI in Libretto that combines task management with the current runtime dashboard
 

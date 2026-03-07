@@ -180,6 +180,14 @@ func (c Config) StoragePostgresDSN() string {
 	return resolveVar(raw)
 }
 
+func (c Config) StorageClickHouseDSN() string {
+	raw := getString(c.section("storage"), "clickhouse_dsn", "")
+	if strings.TrimSpace(raw) == "" {
+		return strings.TrimSpace(os.Getenv("SYMPHONY_CLICKHOUSE_DSN"))
+	}
+	return resolveVar(raw)
+}
+
 // --- insights (extension) ---
 
 func (c Config) InsightsSCMSources() []SCMSource {

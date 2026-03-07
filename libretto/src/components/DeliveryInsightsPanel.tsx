@@ -1,5 +1,5 @@
 import type { DeliveryInsights } from '../lib/api'
-import { hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
+import { deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
 
 type DeliveryInsightsPanelProps = {
   report: DeliveryInsights | null
@@ -41,9 +41,10 @@ export function DeliveryInsightsPanel({ report, loading, error }: DeliveryInsigh
   }
 
   const cards = orderedDeliveryCards(report)
+  const status = deliveryObservabilityState(report, error)
 
   return (
-    <section className="panel delivery-panel">
+    <section className={`panel delivery-panel delivery-panel-${status}`}>
       <div className="panel-heading">
         <div>
           <p className="panel-kicker">Delivery metrics</p>

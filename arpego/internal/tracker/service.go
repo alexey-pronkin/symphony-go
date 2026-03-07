@@ -28,6 +28,7 @@ type RuntimeEvent struct {
 	ObservedAt  time.Time
 	SessionID   string
 	Workspace   string
+	LogPath     string
 	MetadataRaw []byte
 }
 

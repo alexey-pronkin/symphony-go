@@ -11,6 +11,7 @@ import {
   type TaskListResponse,
   type TaskRecord,
 } from './lib/api'
+import { appendCreatedTask, applyTaskUpdate, selectPreferredIssue } from './lib/task-board'
 
 const client = createSymphonyClient()
 const POLL_INTERVAL_MS = 15000
@@ -50,14 +51,14 @@ function App() {
       startTransition(() => {
         setState(nextState)
         setStateError(null)
-        const available = allRuntimeIssues(nextState)
-        if (available.length === 0 && !currentSelectedIssue) {
+        const nextSelected = selectPreferredIssue(nextState, tasks, currentSelectedIssue)
+        if (!nextSelected) {
           setDetail(null)
           setDetailError(null)
           return
         }
-        if (!currentSelectedIssue && available.length > 0) {
-          setSelectedIssue(available[0].issue_identifier)
+        if (nextSelected !== currentSelectedIssue) {
+          setSelectedIssue(nextSelected)
         }
       })
     } catch (error) {
@@ -78,8 +79,9 @@ function App() {
       startTransition(() => {
         setTasks(nextTasks)
         setTasksError(null)
-        if (!selectedIssue && nextTasks.tasks.length > 0) {
-          setSelectedIssue(nextTasks.tasks[0].identifier)
+        const nextSelected = selectPreferredIssue(state, nextTasks, selectedIssue)
+        if (nextSelected && nextSelected !== selectedIssue) {
+          setSelectedIssue(nextSelected)
         }
       })
     } catch (error) {
@@ -176,9 +178,11 @@ function App() {
         description: draft.description?.trim() ? draft.description.trim() : undefined,
       })
       setDraft({ title: '', description: '', state: draft.state ?? 'Todo' })
+      startTransition(() => {
+        setTasks((current) => appendCreatedTask(current, created))
+      })
       setSelectedIssue(created.identifier)
       setTasksError(null)
-      await performLoadTasks('refresh')
       await performLoadState('refresh', created.identifier)
       await performLoadDetail(created.identifier)
     } catch (error) {
@@ -190,8 +194,10 @@ function App() {
 
   async function handleMoveTask(task: TaskRecord, stateName: string) {
     try {
-      await client.updateTask(task.identifier, { state: stateName })
-      await performLoadTasks('refresh')
+      const updated = await client.updateTask(task.identifier, { state: stateName })
+      startTransition(() => {
+        setTasks((current) => applyTaskUpdate(current, updated))
+      })
       await performLoadState('refresh', selectedIssue)
       if (selectedIssue === task.identifier) {
         await performLoadDetail(task.identifier)
@@ -540,10 +546,6 @@ function IssueList({ items, emptyMessage, selectedIssue, onSelect }: IssueListPr
       ))}
     </div>
   )
-}
-
-function allRuntimeIssues(state: RuntimeState): RuntimeIssue[] {
-  return [...state.running, ...state.retrying]
 }
 
 function formatDate(value: string): string {
