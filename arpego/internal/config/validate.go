@@ -27,19 +27,19 @@ func ValidateDispatch(c Config) error {
 	if kind == "" {
 		return &ValidationError{Kind: ErrUnsupportedTrackerKind, Message: "tracker.kind is missing"}
 	}
-	if kind != "linear" {
+	if kind != "linear" && kind != "local" {
 		return &ValidationError{
 			Kind:    ErrUnsupportedTrackerKind,
-			Message: fmt.Sprintf("unsupported tracker kind: %q (supported: linear)", kind),
+			Message: fmt.Sprintf("unsupported tracker kind: %q (supported: linear, local)", kind),
 		}
 	}
-	if c.TrackerAPIKey() == "" {
+	if kind == "linear" && c.TrackerAPIKey() == "" {
 		return &ValidationError{
 			Kind:    ErrMissingTrackerAPIKey,
 			Message: "tracker.api_key is missing or resolved to empty string",
 		}
 	}
-	if c.TrackerProjectSlug() == "" {
+	if kind == "linear" && c.TrackerProjectSlug() == "" {
 		return &ValidationError{
 			Kind:    ErrMissingTrackerProjectSlug,
 			Message: "tracker.project_slug is required for tracker.kind=linear",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -254,6 +255,9 @@ func (o *Orchestrator) dispatchIssue(ctx context.Context, issue tracker.Issue, a
 			OnEvent: func(event agent.Event) {
 				o.recordEvent(issue.ID, event)
 			},
+			RefreshIssue: func(ctx context.Context, issueID string) (tracker.Issue, bool, error) {
+				return o.refreshIssueForContinuation(ctx, issueID)
+			},
 		})
 		o.resultsCh <- workerResult{IssueID: issue.ID, Result: result, Err: err}
 	}()
@@ -294,6 +298,8 @@ func (o *Orchestrator) recordSession(issue tracker.Issue, started agent.SessionS
 	entry.ThreadID = started.ThreadID
 	entry.TurnID = started.TurnID
 	entry.SessionID = started.ThreadID + "-" + started.TurnID
+	entry.SessionLog = started.LogPath
+	entry.TurnCount++
 	ilog.WithSession(ilog.WithIssue(o.logger, issue.ID, issue.Identifier), entry.SessionID).Info("session outcome=started")
 }
 
@@ -310,11 +316,11 @@ func (o *Orchestrator) recordEvent(issueID string, event agent.Event) {
 	if message, ok := event.Payload["text"].(string); ok {
 		entry.LastMessage = message
 	}
-	if turn, ok := event.Payload["turn"].(map[string]any); ok {
-		if _, exists := turn["id"]; exists && event.Method == "turn/started" && entry.TurnCount == 0 {
-			entry.TurnCount = 1
-		}
-	}
+	entry.RecentEvents = appendRecentEvent(entry.RecentEvents, IssueEvent{
+		At:      now,
+		Event:   event.Method,
+		Message: summarizeEvent(event),
+	})
 	if event.Usage != nil {
 		if event.Usage.InputTokens >= entry.lastUsage.InputTokens {
 			entry.CurrentUsage.InputTokens += event.Usage.InputTokens - entry.lastUsage.InputTokens
@@ -330,6 +336,26 @@ func (o *Orchestrator) recordEvent(issueID string, event agent.Event) {
 	if limits := extractRateLimits(event.Payload); limits != nil {
 		o.state.CodexRateLimits = limits
 	}
+}
+
+func appendRecentEvent(events []IssueEvent, event IssueEvent) []IssueEvent {
+	events = append(events, event)
+	if len(events) > 20 {
+		return append([]IssueEvent(nil), events[len(events)-20:]...)
+	}
+	return events
+}
+
+func summarizeEvent(event agent.Event) string {
+	if text, ok := event.Payload["text"].(string); ok && strings.TrimSpace(text) != "" {
+		return text
+	}
+	if turn, ok := event.Payload["turn"].(map[string]any); ok {
+		if id, ok := turn["id"].(string); ok && id != "" {
+			return id
+		}
+	}
+	return event.Method
 }
 
 func (o *Orchestrator) applyConfigLocked(cfg config.Config) {

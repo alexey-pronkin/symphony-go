@@ -64,8 +64,16 @@ func (s *Session) Start(ctx context.Context, params StartParams) (SessionStarted
 	if err != nil {
 		return SessionStarted{}, err
 	}
+	s.state = SessionStarted{ThreadID: threadID}
+	return s.StartTurn(ctx, params)
+}
+
+func (s *Session) StartTurn(ctx context.Context, params StartParams) (SessionStarted, error) {
+	if s.state.ThreadID == "" {
+		return SessionStarted{}, &RunError{Kind: ErrProtocolPayload, Message: "thread not started"}
+	}
 	if err := s.client.Send(Request{ID: turnStartID, Method: "turn/start", Params: map[string]any{
-		"threadId":       threadID,
+		"threadId":       s.state.ThreadID,
 		"cwd":            params.WorkspacePath,
 		"title":          params.Title,
 		"approvalPolicy": approvalPolicy(s.cfg),
@@ -85,7 +93,7 @@ func (s *Session) Start(ctx context.Context, params StartParams) (SessionStarted
 	if err != nil {
 		return SessionStarted{}, err
 	}
-	s.state = SessionStarted{ThreadID: threadID, TurnID: turnID}
+	s.state.TurnID = turnID
 	return s.state, nil
 }
 

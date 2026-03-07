@@ -195,6 +195,13 @@ func TestValidate_UnsupportedKind(t *testing.T) {
 	assertValidationKind(t, config.ValidateDispatch(c), config.ErrUnsupportedTrackerKind)
 }
 
+func TestValidate_LocalTrackerDoesNotRequireLinearCredentials(t *testing.T) {
+	c := cfg(map[string]any{"tracker": nested("kind", "local")})
+	if err := config.ValidateDispatch(c); err != nil {
+		t.Fatalf("expected valid local config, got %v", err)
+	}
+}
+
 func TestValidate_MissingAPIKey(t *testing.T) {
 	c := cfg(map[string]any{"tracker": nested("kind", "linear", "project_slug", "p")})
 	assertValidationKind(t, config.ValidateDispatch(c), config.ErrMissingTrackerAPIKey)

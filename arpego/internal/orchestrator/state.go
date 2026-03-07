@@ -33,8 +33,16 @@ type RunningEntry struct {
 	TurnCount     int
 	RetryAttempt  int
 	CurrentUsage  agent.Usage
+	RecentEvents  []IssueEvent
+	SessionLog    string
 	lastUsage     agent.Usage
 	cancel        func()
+}
+
+type IssueEvent struct {
+	At      time.Time `json:"at"`
+	Event   string    `json:"event"`
+	Message string    `json:"message"`
 }
 
 type CodexTotals struct {

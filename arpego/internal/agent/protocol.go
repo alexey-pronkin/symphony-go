@@ -33,6 +33,7 @@ type Usage struct {
 type SessionStarted struct {
 	ThreadID string
 	TurnID   string
+	LogPath  string
 }
 
 type Event struct {

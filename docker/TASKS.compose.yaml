@@ -1,0 +1,17 @@
+tasks:
+  - id: task-1
+    identifier: SYM-1
+    title: "Bring up Symphony compose stack"
+    description: "Validate task platform, runtime state, and monitoring profile."
+    state: Todo
+    labels:
+      - platform
+    blocked_by: []
+  - id: task-2
+    identifier: SYM-2
+    title: "Inspect runtime metrics in Prometheus"
+    description: "Use the monitoring profile to confirm metrics scraping."
+    state: In Progress
+    labels:
+      - observability
+    blocked_by: []

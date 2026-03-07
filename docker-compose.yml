@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: symphony
+      POSTGRES_USER: symphony
+      POSTGRES_PASSWORD: symphony
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U symphony -d symphony"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping | grep -q Ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  arpego:
+    build:
+      context: ./arpego
+    command: ["--port", "18080", "/app/WORKFLOW.md"]
+    ports:
+      - "18080:18080"
+    environment:
+      SYMPHONY_POSTGRES_DSN: postgres://symphony:symphony@postgres:5432/symphony?sslmode=disable
+      SYMPHONY_CLICKHOUSE_DSN: clickhouse://clickhouse:9000?database=default
+    volumes:
+      - ./docker/WORKFLOW.compose.md:/app/WORKFLOW.md:ro
+      - ./docker/TASKS.compose.yaml:/app/TASKS.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.7.1
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - arpego
+
+  grafana:
+    image: grafana/grafana-oss:12.1.1
+    profiles: ["monitoring"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres-data:
+  clickhouse-data:

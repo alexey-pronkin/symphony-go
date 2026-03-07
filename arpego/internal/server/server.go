@@ -13,12 +13,12 @@ type Server struct {
 	listener   net.Listener
 }
 
-func New(runtime Runtime, port int) *Server {
+func New(runtime Runtime, tasks TaskPlatform, port int, dashboardDir string) *Server {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              addr,
-			Handler:           NewHandler(runtime),
+			Handler:           NewHandler(runtime, tasks, dashboardDir),
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}

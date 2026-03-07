@@ -84,6 +84,48 @@ test('refresh posts to refresh endpoint', async () => {
   assert.equal(response.queued, true)
 })
 
+test('task endpoints use expected routes and payloads', async () => {
+  const requests: Array<{ url: string; method: string; body: string }> = []
+  const client = createSymphonyClient({
+    fetcher: async (input, init) => {
+      requests.push({
+        url: String(input),
+        method: String(init?.method ?? 'GET'),
+        body: String(init?.body ?? ''),
+      })
+      if (String(input).endsWith('/api/v1/tasks') && String(init?.method ?? 'GET') === 'GET') {
+        return jsonResponse({
+          tasks: [],
+          counts: {
+            total: 0,
+            by_state: {},
+          },
+        })
+      }
+      return jsonResponse({
+        id: 'task-1',
+        identifier: 'SYM-1',
+        title: 'Created',
+        state: 'Todo',
+        labels: [],
+        blocked_by: [],
+      })
+    },
+  })
+
+  await client.fetchTasks()
+  await client.createTask({ title: 'Created', state: 'Todo' })
+  await client.updateTask('SYM-1', { state: 'Done' })
+
+  assert.equal(requests[0]?.url, '/api/v1/tasks')
+  assert.equal(requests[0]?.method, 'GET')
+  assert.equal(requests[1]?.method, 'POST')
+  assert.match(requests[1]?.body ?? '', /"title":"Created"/)
+  assert.equal(requests[2]?.url, '/api/v1/tasks/SYM-1')
+  assert.equal(requests[2]?.method, 'PATCH')
+  assert.match(requests[2]?.body ?? '', /"state":"Done"/)
+})
+
 test('request surfaces structured API errors', async () => {
   const client = createSymphonyClient({
     fetcher: async () =>
