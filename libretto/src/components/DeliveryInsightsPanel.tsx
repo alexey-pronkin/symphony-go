@@ -124,6 +124,14 @@ export function DeliveryInsightsPanel({ report, loading, error }: DeliveryInsigh
               <dt>Drift commits</dt>
               <dd>{report.scm.totals.drift_commits}</dd>
             </div>
+            <div>
+              <dt>Open changes</dt>
+              <dd>{report.scm.totals.open_change_requests}</dd>
+            </div>
+            <div>
+              <dt>Failing checks</dt>
+              <dd>{report.scm.totals.failing_change_requests}</dd>
+            </div>
           </dl>
         </article>
       </div>
@@ -142,6 +150,8 @@ export function DeliveryInsightsPanel({ report, loading, error }: DeliveryInsigh
               <span>{source.branches} branches</span>
               <span>{source.unmerged_branches} unmerged</span>
               <span>{source.stale_branches} stale</span>
+              <span>{source.open_change_requests} open changes</span>
+              <span>{source.failing_change_requests} failing</span>
               <span>{source.merge_readiness} readiness</span>
             </div>
             {source.warnings?.length ? (

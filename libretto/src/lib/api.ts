@@ -182,18 +182,28 @@ export type DeliveryInsights = {
       drift_commits: number
       ahead_commits: number
       max_age_hours: number
+      open_change_requests: number
+      approved_change_requests: number
+      failing_change_requests: number
+      stale_change_requests: number
     }
     sources: Array<{
       kind: string
       name: string
       repo_path: string
       main_branch: string
+      repository?: string
+      project_id?: string
       branches: number
       unmerged_branches: number
       stale_branches: number
       drift_commits: number
       ahead_commits: number
       max_age_hours: number
+      open_change_requests: number
+      approved_change_requests: number
+      failing_change_requests: number
+      stale_change_requests: number
       merge_readiness: number
       warnings?: string[]
     }>

@@ -20,6 +20,10 @@ type SCMSource struct {
 	Name       string
 	RepoPath   string
 	MainBranch string
+	APIURL     string
+	Repository string
+	ProjectID  string
+	APIToken   string
 }
 
 // New wraps a parsed front matter map.
@@ -211,11 +215,19 @@ func (c Config) InsightsSCMSources() []SCMSource {
 		if mainBranch == "" {
 			mainBranch = "main"
 		}
+		apiURL := strings.TrimSpace(resolveVar(getString(m, "api_url", "")))
+		repository := strings.TrimSpace(getString(m, "repository", ""))
+		projectID := strings.TrimSpace(getString(m, "project_id", ""))
+		apiToken := strings.TrimSpace(resolveVar(getString(m, "api_token", "")))
 		sources = append(sources, SCMSource{
 			Kind:       kind,
 			Name:       name,
 			RepoPath:   repoPath,
 			MainBranch: mainBranch,
+			APIURL:     apiURL,
+			Repository: repository,
+			ProjectID:  projectID,
+			APIToken:   apiToken,
 		})
 	}
 	return sources

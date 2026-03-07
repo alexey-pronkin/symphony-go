@@ -146,12 +146,15 @@ delivery dashboard with:
 - integral metrics: delivery health, flow efficiency, merge readiness, predictability
 - agile-oriented task signals: throughput, completion ratio, review load
 - kanban-oriented task signals: WIP, blocked ratio, aging work, flow load
-- SCM gitflow signals grouped by configured source
+- SCM gitflow and review/CI signals grouped by configured source
 
 SCM sources are configured under `insights.scm_sources` and can be labeled as
-`github`, `gitlab`, or `gitverse`. The current implementation inspects local git
-repositories through `go-git`, so the same collection path works for hosted and
-self-hosted remotes.
+`github`, `gitlab`, or `gitverse`. Sources may mix local `repo_path` inspection
+with provider metadata such as `api_url`, `repository`, `project_id`, and
+`api_token`. GitHub and GitLab sources now augment local branch metrics with
+open-change, approval, stale-review, and failing-check signals. GitVerse
+currently degrades gracefully with explicit source warnings when provider
+metrics are unavailable.
 
 Example:
 
@@ -171,10 +174,15 @@ insights:
       name: symphony-core
       repo_path: ~/src/symphony-go
       main_branch: main
+      repository: alexey-pronkin/symphony-go
+      api_token: $GITHUB_TOKEN
     - kind: gitlab
       name: internal-platform
       repo_path: ~/src/internal-platform
       main_branch: master
+      api_url: https://gitlab.example.com/api/v4
+      project_id: group%2Finternal-platform
+      api_token: $GITLAB_TOKEN
 server:
   port: 18080
 ---
