@@ -1,81 +1,69 @@
-## 1. Bootstrap
+## 1. Foundation Branch (`main`) [done]
 
-- [ ] 1.1 Update `arpego/go.mod` to Go 1.21; add dependencies: `gopkg.in/yaml.v3`, `github.com/fsnotify/fsnotify`
-- [ ] 1.2 Add `arpego/Makefile` with `build`, `test`, `lint` targets
+This slice already landed in commit `66f0759`.
 
-## 2. Workflow Loader (`internal/workflow`)
+- [x] 1.1 Bootstrap repo tooling: shared `Makefile`, git hooks, lint/format config, Nx workspace, and generated OpenSpec integration assets
+- [x] 1.2 Implement `internal/workflow`: loader, watcher, template rendering, and tests
+- [x] 1.3 Implement `internal/config`: typed getters, env/path resolution, dispatch validation, and tests
+- [x] 1.4 Add baseline Docker, Traefik, CrowdSec, and Trivy scaffolding plus repo docs
 
-- [ ] 2.1 Implement `loader.go`: `Load(path string) (WorkflowDefinition, error)` — YAML front matter split, prompt body trim, typed error returns
-- [ ] 2.2 Implement `watcher.go`: `Watch(path string, onChange func(WorkflowDefinition)) (io.Closer, error)` using `fsnotify`; invalid reload keeps last good config
-- [ ] 2.3 Implement `template.go`: `Render(tmpl string, issue Issue, attempt *int) (string, error)` using `text/template` with `missingkey=error`
-- [ ] 2.4 Write `workflow_test.go`: cover load/parse/error cases, template strict rendering
+## 2. Branch Slice: `feat/tracker-workspace-slice` [current]
 
-## 3. Config Layer (`internal/config`)
+Goal: finish the tracker and workspace contracts from `SPEC.md` sections 9 and 11 so the orchestrator slice has real dependencies to build against.
 
-- [ ] 3.1 Implement `config.go`: `Config` struct with typed getters for all SPEC.md Section 6.4 fields, defaults, `$VAR` resolution, `~` expansion
-- [ ] 3.2 Implement `validate.go`: `ValidateDispatch(c Config) error` — check tracker.kind, api_key, project_slug, codex.command
-- [ ] 3.3 Write `config_test.go`: defaults, $VAR resolution, ~ expansion, preflight validation cases
+### Commit A: Tracker Models And Tests
 
-## 4. Issue Tracker Client (`internal/tracker`)
+- [x] 2.1 Add failing tests for Linear normalization, pagination, empty-ID short-circuit, and error categorization
+- [x] 2.2 Implement `internal/tracker/model.go`: `Issue` and `BlockerRef` matching `SPEC.md` section 4.1.1
+- [x] 2.3 Implement normalization helpers: labels lowercase, blockers from inverse `blocks` relations, priority integer-or-nil, parsed timestamps
 
-- [ ] 4.1 Implement `model.go`: `Issue`, `BlockerRef` structs matching SPEC.md Section 4.1.1
-- [ ] 4.2 Implement `linear.go`: `Client` with `FetchCandidates()`, `FetchByStates()`, `FetchStatesByIDs()` — GraphQL over `net/http`, 30s timeout, pagination
-- [ ] 4.3 Implement normalization: labels lowercase, blockers from inverse `blocks` relations, priority int or nil, ISO-8601 timestamps
-- [ ] 4.4 Implement error categorization: `linear_api_request`, `linear_api_status`, `linear_graphql_errors`, `linear_unknown_payload`
-- [ ] 4.5 Write `linear_test.go`: normalization unit tests with mock HTTP server; pagination test; empty-ID-list short-circuit
+### Commit B: Linear Client
 
-## 5. Workspace Manager (`internal/workspace`)
+- [x] 2.4 Implement `internal/tracker/linear.go`: GraphQL client with `FetchCandidates()`, `FetchByStates()`, and `FetchStatesByIDs()`
+- [x] 2.5 Implement transport and payload error mapping: `linear_api_request`, `linear_api_status`, `linear_graphql_errors`, `linear_unknown_payload`
+- [x] 2.6 Make tracker tests pass under `go test ./...`
 
-- [ ] 5.1 Implement `safety.go`: `SanitizeKey(id string) string`, `ValidatePath(root, path string) error` (root containment check)
-- [ ] 5.2 Implement `manager.go`: `EnsureWorkspace(root, identifier string) (Workspace, error)` — create or reuse, `created_now` flag
-- [ ] 5.3 Implement `hooks.go`: `RunHook(script, cwd string, timeoutMs int) error` via `bash -lc`, per-hook failure semantics
-- [ ] 5.4 Write `workspace_test.go`: sanitize key, root containment, create/reuse, hook timeout
+### Commit C: Workspace Safety And Hooks
 
-## 6. Agent Runner (`internal/agent`)
+- [x] 2.7 Add failing tests for sanitize key, root containment, create/reuse behavior, and hook timeout/failure semantics
+- [x] 2.8 Implement `internal/workspace/safety.go`: sanitized workspace keys and root-containment validation
+- [x] 2.9 Implement `internal/workspace/manager.go`: deterministic workspace creation/reuse with `created_now`
+- [x] 2.10 Implement `internal/workspace/hooks.go`: `bash -lc` hook execution with timeout and per-hook failure handling
+- [x] 2.11 Make workspace tests pass under `go test ./...`
 
-- [ ] 6.1 Implement `protocol.go`: JSON-RPC message types for `initialize`, `initialized`, `thread/start`, `turn/start`, `turn/completed`, `turn/failed`, approvals, tool calls
-- [ ] 6.2 Implement `client.go`: `AppServerClient` — `bash -lc` subprocess launch, stdout line scanner (10MB), stderr drain goroutine, stdin writer
-- [ ] 6.3 Implement `session.go`: startup handshake sequence with `read_timeout_ms`; extract `thread_id`, `turn_id`; emit `session_started`
-- [ ] 6.4 Implement turn streaming: `RunTurn(ctx, prompt, issue) (TurnResult, error)` with `turn_timeout_ms` context deadline
-- [ ] 6.5 Implement approval handler: auto-approve command and file-change; return failure for unsupported tools; fail immediately on user-input-required
-- [ ] 6.6 Implement `events.go`: token accounting — prefer thread totals, track deltas, emit `CodexUpdate` to orchestrator
-- [ ] 6.7 Implement `runner.go`: `RunAttempt(issue, attempt, hooks, onEvent)` — full worker lifecycle: workspace → before_run → session → turn loop → after_run
-- [ ] 6.8 Write `client_test.go`: mock subprocess test (echo server), handshake, approval, unsupported tool, token accounting
+## 3. Branch Slice: Agent Runner
 
-## 7. Orchestrator (`internal/orchestrator`)
+Goal: satisfy `SPEC.md` section 10 on top of the tracker/workspace foundations.
 
-- [ ] 7.1 Implement `state.go`: `State` struct with all fields from SPEC.md Section 4.1.8; mutex-protected
-- [ ] 7.2 Implement `dispatch.go`: `dispatch(issue, attempt)` — spawn goroutine, update claimed/running, cancel existing retry timer
-- [ ] 7.3 Implement `retry.go`: `scheduleRetry(issueID, attempt, info)` — compute backoff delay, create timer goroutine, store in `retryAttempts`
-- [ ] 7.4 Implement `reconcile.go`: stall detection + tracker state refresh each tick; terminal → stop+cleanup; non-active → stop only
-- [ ] 7.5 Implement `orchestrator.go`: `Orchestrator.Run(ctx)` — startup cleanup, immediate tick, ticker loop, result channel processing
-- [ ] 7.6 Write `orchestrator_test.go`: dispatch eligibility, sort order, todo blocker rule, retry backoff, reconciliation transitions, stall detection — all with mock tracker
+- [x] 3.1 Add failing tests for handshake ordering, line-buffered parsing, approval handling, unsupported tools, and token accounting
+- [x] 3.2 Implement `internal/agent/protocol.go` request/response types
+- [x] 3.3 Implement `internal/agent/client.go` stdio subprocess client
+- [x] 3.4 Implement `internal/agent/session.go` and `events.go` for handshake, event streaming, and token/rate-limit extraction
+- [x] 3.5 Implement `internal/agent/runner.go` for workspace → prompt → session → turn loop lifecycle
 
-## 8. Structured Logging (`internal/logging`)
+## 4. Branch Slice: Orchestrator And Logging
 
-- [ ] 8.1 Implement `logging.go`: `New() *slog.Logger` — JSON handler to stderr; `WithIssue(l, id, identifier)`, `WithSession(l, sessionID)` helpers
-- [ ] 8.2 Wire logger into all packages; verify `issue_id`, `issue_identifier`, `session_id` appear on relevant log entries
+Goal: satisfy `SPEC.md` sections 8 and 13.1-13.5.
 
-## 9. HTTP API (`internal/server`)
+- [x] 4.1 Add failing tests for dispatch eligibility, sort order, per-state concurrency, retry backoff, reconciliation, and stall detection
+- [x] 4.2 Implement `internal/logging/logging.go`
+- [x] 4.3 Implement `internal/orchestrator/state.go`, `dispatch.go`, `retry.go`, `reconcile.go`, and `orchestrator.go`
+- [x] 4.4 Wire structured logging and aggregate runtime/token accounting through orchestrator state
 
-- [ ] 9.1 Implement `server.go`: `Server` with `Start(port)`, graceful `Shutdown(ctx)`, loopback bind
-- [ ] 9.2 Implement `handlers.go`: `GET /api/v1/state`, `GET /api/v1/{id}`, `POST /api/v1/refresh` — JSON responses per SPEC.md Section 13.7.2
-- [ ] 9.3 Implement minimal `GET /` HTML status page (server-rendered, no SPA)
-- [ ] 9.4 Return `405` for unsupported methods; use JSON error envelope for all errors
-- [ ] 9.5 Write `server_test.go`: state endpoint shape, 404 for unknown issue, 405 for wrong method, refresh 202
+## 5. Branch Slice: HTTP API And Entrypoint
 
-## 10. CLI Entrypoint (`cmd/arpego`)
+Goal: finish the optional HTTP surface plus CLI wiring from `SPEC.md` section 13.7 and the entrypoint requirements.
 
-- [ ] 10.1 Replace stub `internal/app/app.go` with full wiring: init logger, load workflow, validate, run startup cleanup, start orchestrator, optionally start HTTP server
-- [ ] 10.2 Add CLI arg parsing: positional `[workflow-path]`, `--port` flag
-- [ ] 10.3 Wire SIGINT/SIGTERM graceful shutdown (10s HTTP drain, cancel orchestrator context)
-- [ ] 10.4 Exit nonzero with clear message on startup validation failure
+- [x] 5.1 Add failing tests for `/api/v1/state`, `/api/v1/{id}`, `/api/v1/refresh`, `405`, and unknown issue handling
+- [x] 5.2 Implement `internal/server/server.go` and `handlers.go`
+- [x] 5.3 Replace stub `internal/app/app.go` wiring with workflow/config/orchestrator/server startup and graceful shutdown
+- [x] 5.4 Add CLI arg parsing for `[workflow-path]` and `--port`
 
-## 11. Validation
+## 6. Validation And Docs
 
-- [ ] 11.1 Run `go test ./...` in `arpego/` — all unit tests pass
-- [ ] 11.2 Run `go vet ./...` and `go build ./...` — clean
-- [ ] 11.3 Run `golangci-lint run` (if available) — no lint errors
-- [ ] 11.4 Write a sample `WORKFLOW.md` for local testing and verify `arpego ./WORKFLOW.md` starts without errors
-- [ ] 11.5 Verify `/api/v1/state` returns valid JSON when server is enabled
-- [ ] 11.6 Update `arpego/README.md` with build, run, and config instructions
+- [x] 6.1 Run `go test ./...` in `arpego/`
+- [x] 6.2 Run `go vet ./...` and `go build ./...` in `arpego/`
+- [x] 6.3 Run `golangci-lint run` in `arpego/`
+- [x] 6.4 Write a sample `WORKFLOW.md` for local testing and verify `arpego ./WORKFLOW.md` starts without errors
+- [x] 6.5 Verify `/api/v1/state` returns valid JSON when server is enabled
+- [x] 6.6 Update `arpego/README.md` with build, run, and config instructions
