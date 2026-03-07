@@ -113,6 +113,56 @@ func TestVarResolution_LiteralKey(t *testing.T) {
 	}
 }
 
+func TestStoragePostgresDSN_ResolvesEnvDefault(t *testing.T) {
+	t.Setenv("SYMPHONY_POSTGRES_DSN", "postgres://example")
+	c := cfg(nil)
+	if c.StoragePostgresDSN() != "postgres://example" {
+		t.Fatalf("expected env postgres dsn, got %q", c.StoragePostgresDSN())
+	}
+}
+
+func TestTrackerStorage_DefaultsToFileForLocal(t *testing.T) {
+	c := cfg(map[string]any{"tracker": nested("kind", "local")})
+	if c.TrackerStorage() != "file" {
+		t.Fatalf("expected file storage, got %q", c.TrackerStorage())
+	}
+}
+
+func TestInsightsSCMSources_NormalizesAndExpands(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	c := cfg(map[string]any{
+		"insights": nested("scm_sources", []any{
+			map[string]any{
+				"kind":        "GitHub",
+				"repo_path":   "~/work/symphony",
+				"main_branch": "",
+			},
+			map[string]any{
+				"kind":      "gitlab",
+				"name":      "internal",
+				"repo_path": "/srv/git/internal",
+			},
+		}),
+	})
+
+	sources := c.InsightsSCMSources()
+	if len(sources) != 2 {
+		t.Fatalf("sources len = %d want 2", len(sources))
+	}
+	if sources[0].Kind != "github" {
+		t.Fatalf("first kind = %q want github", sources[0].Kind)
+	}
+	if sources[0].RepoPath != filepath.Join(home, "work", "symphony") {
+		t.Fatalf("first repo path = %q", sources[0].RepoPath)
+	}
+	if sources[0].MainBranch != "main" {
+		t.Fatalf("first main branch = %q want main", sources[0].MainBranch)
+	}
+	if sources[1].Name != "internal" {
+		t.Fatalf("second name = %q want internal", sources[1].Name)
+	}
+}
+
 // --- ~ path expansion ---
 
 func TestTildeExpansion_WorkspaceRoot(t *testing.T) {
@@ -199,6 +249,25 @@ func TestValidate_LocalTrackerDoesNotRequireLinearCredentials(t *testing.T) {
 	c := cfg(map[string]any{"tracker": nested("kind", "local")})
 	if err := config.ValidateDispatch(c); err != nil {
 		t.Fatalf("expected valid local config, got %v", err)
+	}
+}
+
+func TestValidate_LocalTrackerWithUnsupportedStorage(t *testing.T) {
+	c := cfg(map[string]any{"tracker": nested("kind", "local", "storage", "redis")})
+	assertValidationKind(t, config.ValidateDispatch(c), config.ErrUnsupportedTrackerStorage)
+}
+
+func TestValidate_LocalPostgresStorageRequiresDSN(t *testing.T) {
+	t.Setenv("SYMPHONY_POSTGRES_DSN", "")
+	c := cfg(map[string]any{"tracker": nested("kind", "local", "storage", "postgres")})
+	assertValidationKind(t, config.ValidateDispatch(c), config.ErrMissingPostgresDSN)
+}
+
+func TestValidate_LocalPostgresStorageWithDSN(t *testing.T) {
+	t.Setenv("SYMPHONY_POSTGRES_DSN", "postgres://example")
+	c := cfg(map[string]any{"tracker": nested("kind", "local", "storage", "postgres")})
+	if err := config.ValidateDispatch(c); err != nil {
+		t.Fatalf("expected valid postgres local config, got %v", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexey-pronkin/symphony-go/arpego/internal/insights"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/orchestrator"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/tracker"
 )
@@ -22,12 +24,16 @@ type Runtime interface {
 }
 
 type TaskPlatform interface {
-	ListTasks() ([]tracker.Issue, error)
-	CreateTask(tracker.CreateTaskInput) (tracker.Issue, error)
-	UpdateTask(string, tracker.UpdateTaskInput) (tracker.Issue, error)
+	ListTasks(context.Context) ([]tracker.Issue, error)
+	CreateTask(context.Context, tracker.CreateTaskInput) (tracker.Issue, error)
+	UpdateTask(context.Context, string, tracker.UpdateTaskInput) (tracker.Issue, error)
 }
 
-func NewHandler(runtime Runtime, tasks TaskPlatform, dashboardDir string) http.Handler {
+type DeliveryInsights interface {
+	Delivery(context.Context) (insights.DeliveryReport, error)
+}
+
+func NewHandler(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, dashboardDir string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/metrics" {
@@ -39,7 +45,7 @@ func NewHandler(runtime Runtime, tasks TaskPlatform, dashboardDir string) http.H
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-			handleAPI(runtime, tasks, w, r)
+			handleAPI(runtime, tasks, delivery, w, r)
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -85,12 +91,18 @@ func tryServeDashboard(w http.ResponseWriter, r *http.Request, dashboardDir stri
 	return true
 }
 
-func handleAPI(runtime Runtime, tasks TaskPlatform, w http.ResponseWriter, r *http.Request) {
+func handleAPI(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/api/v1/tasks":
 		handleTasks(tasks, w, r)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/tasks/"):
 		handleTaskByIdentifier(tasks, w, r)
+	case r.URL.Path == "/api/v1/insights/delivery":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		handleDeliveryInsights(delivery, w, r)
 	case r.URL.Path == "/api/v1/state":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -135,6 +147,29 @@ func handleAPI(runtime Runtime, tasks TaskPlatform, w http.ResponseWriter, r *ht
 	}
 }
 
+func handleDeliveryInsights(delivery DeliveryInsights, w http.ResponseWriter, r *http.Request) {
+	if delivery == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": map[string]any{
+				"code":    "delivery_insights_unavailable",
+				"message": "delivery insights service is unavailable",
+			},
+		})
+		return
+	}
+	report, err := delivery.Delivery(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": map[string]any{
+				"code":    "delivery_insights_failed",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
 func handleTasks(tasks TaskPlatform, w http.ResponseWriter, r *http.Request) {
 	if tasks == nil {
 		writeJSON(w, http.StatusConflict, map[string]any{
@@ -147,7 +182,7 @@ func handleTasks(tasks TaskPlatform, w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		issues, err := tasks.ListTasks()
+		issues, err := tasks.ListTasks(r.Context())
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": map[string]any{
@@ -179,7 +214,7 @@ func handleTasks(tasks TaskPlatform, w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		issue, err := tasks.CreateTask(input)
+		issue, err := tasks.CreateTask(r.Context(), input)
 		if err != nil {
 			writeTaskError(w, err)
 			return
@@ -219,7 +254,7 @@ func handleTaskByIdentifier(tasks TaskPlatform, w http.ResponseWriter, r *http.R
 		})
 		return
 	}
-	issue, err := tasks.UpdateTask(identifier, input)
+	issue, err := tasks.UpdateTask(r.Context(), identifier, input)
 	if err != nil {
 		writeTaskError(w, err)
 		return
@@ -251,6 +286,15 @@ func readJSON(body io.ReadCloser, out any) error {
 }
 
 func writeTaskError(w http.ResponseWriter, err error) {
+	if errors.Is(err, tracker.ErrTaskPlatformUnavailable) {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": map[string]any{
+				"code":    "task_platform_unavailable",
+				"message": "task platform is unavailable for the active tracker",
+			},
+		})
+		return
+	}
 	var taskErr *tracker.TaskError
 	if errors.As(err, &taskErr) {
 		status := http.StatusBadRequest
@@ -305,7 +349,7 @@ func writeMetrics(runtime Runtime, tasks TaskPlatform, w http.ResponseWriter) {
 	if tasks == nil {
 		return
 	}
-	issues, err := tasks.ListTasks()
+	issues, err := tasks.ListTasks(context.Background())
 	if err != nil {
 		return
 	}

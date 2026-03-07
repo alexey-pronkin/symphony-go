@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/config"
+	"github.com/alexey-pronkin/symphony-go/arpego/internal/insights"
 	ilog "github.com/alexey-pronkin/symphony-go/arpego/internal/logging"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/orchestrator"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/server"
@@ -43,7 +44,11 @@ func RunArgs(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	trackerClient, taskPlatform := buildTrackerServices(cfg, workflowPath)
+	trackerClient, taskPlatform, trackerCloser, err := buildTrackerServices(ctx, cfg, workflowPath)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(trackerCloser)
 	orc := orchestrator.New(orchestrator.Options{
 		Config:   cfg,
 		Workflow: def,
@@ -67,7 +72,13 @@ func RunArgs(args []string) error {
 
 	var httpServer *server.Server
 	if port, ok := resolvePort(cliPort, cliPortSet, def.Config); ok {
-		httpServer = server.New(orc, taskPlatform, port, detectDashboardDir())
+		httpServer = server.New(
+			orc,
+			taskPlatform,
+			buildDeliveryInsights(cfg, taskPlatform, orc),
+			port,
+			detectDashboardDir(),
+		)
 		if err := httpServer.Start(); err != nil {
 			return fmt.Errorf("start http server: %w", err)
 		}
@@ -83,6 +94,29 @@ func RunArgs(args []string) error {
 		}
 	}
 	return nil
+}
+
+func buildDeliveryInsights(
+	cfg config.Config,
+	tasks server.TaskPlatform,
+	runtime server.Runtime,
+) *insights.Service {
+	sources := make([]insights.SourceConfig, 0, len(cfg.InsightsSCMSources()))
+	for _, source := range cfg.InsightsSCMSources() {
+		sources = append(sources, insights.SourceConfig{
+			Kind:       source.Kind,
+			Name:       source.Name,
+			RepoPath:   source.RepoPath,
+			MainBranch: source.MainBranch,
+		})
+	}
+	return insights.NewService(insights.Options{
+		Tasks:            tasks,
+		Runtime:          runtime,
+		Sources:          sources,
+		StaleAfter:       time.Duration(cfg.InsightsStaleBranchHours()) * time.Hour,
+		ThroughputWindow: time.Duration(cfg.InsightsThroughputWindowDays()) * 24 * time.Hour,
+	})
 }
 
 func parseArgs(args []string) (string, int, bool, error) {
@@ -150,12 +184,25 @@ func detectDashboardDir() string {
 	return ""
 }
 
-func buildTrackerServices(cfg config.Config, workflowPath string) (orchestrator.Tracker, server.TaskPlatform) {
+func buildTrackerServices(
+	ctx context.Context,
+	cfg config.Config,
+	workflowPath string,
+) (orchestrator.Tracker, server.TaskPlatform, io.Closer, error) {
 	if cfg.TrackerKind() != "local" {
-		return nil, nil
+		return nil, nil, nil, nil
+	}
+	if cfg.TrackerStorage() == "postgres" {
+		postgres, err := tracker.OpenPostgresPlatform(ctx, cfg.StoragePostgresDSN(), cfg.TrackerProjectSlug())
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("open postgres task platform: %w", err)
+		}
+		service := tracker.NewTaskService(postgres, postgres)
+		return service, service, postgres, nil
 	}
 	local := tracker.NewLocalPlatform(resolveTaskFile(workflowPath, cfg), cfg.TrackerProjectSlug())
-	return local, local
+	service := tracker.NewTaskService(local, local)
+	return service, service, nil, nil
 }
 
 func resolveTaskFile(workflowPath string, cfg config.Config) string {

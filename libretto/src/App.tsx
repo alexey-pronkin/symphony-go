@@ -1,8 +1,10 @@
 import { startTransition, useEffect, useEffectEvent, useState } from 'react'
 import './App.css'
+import { DeliveryInsightsPanel } from './components/DeliveryInsightsPanel'
 import {
   createSymphonyClient,
   type CreateTaskInput,
+  type DeliveryInsights,
   type IssueDetail,
   type RuntimeIssue,
   type RuntimeState,
@@ -17,10 +19,13 @@ const TASK_COLUMNS = ['Todo', 'In Progress', 'Review', 'Done']
 function App() {
   const [state, setState] = useState<RuntimeState | null>(null)
   const [tasks, setTasks] = useState<TaskListResponse | null>(null)
+  const [delivery, setDelivery] = useState<DeliveryInsights | null>(null)
   const [stateError, setStateError] = useState<string | null>(null)
   const [tasksError, setTasksError] = useState<string | null>(null)
+  const [deliveryError, setDeliveryError] = useState<string | null>(null)
   const [loadingState, setLoadingState] = useState(true)
   const [loadingTasks, setLoadingTasks] = useState(true)
+  const [loadingDelivery, setLoadingDelivery] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [creatingTask, setCreatingTask] = useState(false)
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null)
@@ -84,6 +89,24 @@ function App() {
     }
   }
 
+  async function performLoadDelivery(mode: 'initial' | 'refresh' = 'refresh') {
+    if (mode === 'initial') {
+      setLoadingDelivery(true)
+    }
+
+    try {
+      const nextDelivery = await client.fetchDeliveryInsights()
+      startTransition(() => {
+        setDelivery(nextDelivery)
+        setDeliveryError(null)
+      })
+    } catch (error) {
+      setDeliveryError(asMessage(error))
+    } finally {
+      setLoadingDelivery(false)
+    }
+  }
+
   async function performLoadDetail(identifier: string) {
     setLoadingDetail(true)
     try {
@@ -103,6 +126,7 @@ function App() {
   const loadRuntimeEffect = useEffectEvent((mode: 'initial' | 'refresh' = 'refresh') => {
     void performLoadState(mode)
     void performLoadTasks(mode)
+    void performLoadDelivery(mode)
   })
 
   const loadDetailEffect = useEffectEvent((identifier: string) => {
@@ -133,6 +157,7 @@ function App() {
     }
     await performLoadState('refresh', selectedIssue)
     await performLoadTasks('refresh')
+    await performLoadDelivery('refresh')
     if (selectedIssue) {
       await performLoadDetail(selectedIssue)
     }
@@ -217,6 +242,8 @@ function App() {
 
       {state ? (
         <>
+          <DeliveryInsightsPanel report={delivery} loading={loadingDelivery} error={deliveryError} />
+
           <section className="summary-grid">
             {summary.map((item) => (
               <article className={`summary-card tone-${item.tone}`} key={item.label}>
