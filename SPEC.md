@@ -342,7 +342,8 @@ Fields:
 
 - `kind` (string)
   - Required for dispatch.
-  - Current supported value: `linear`
+  - Current supported values: `linear`
+  - Optional extension value: `local`
 - `endpoint` (string)
   - Default for `tracker.kind == "linear"`: `https://api.linear.app/graphql`
 - `api_key` (string)
@@ -351,6 +352,9 @@ Fields:
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `project_slug` (string)
   - Required for dispatch when `tracker.kind == "linear"`.
+- `file` (path string, optional extension)
+  - Used by `tracker.kind == "local"` implementations to resolve a task store file.
+  - A local tracker may default this path relative to the selected `WORKFLOW.md`.
 - `active_states` (list of strings or comma-separated string)
   - Default: `Todo`, `In Progress`
 - `terminal_states` (list of strings or comma-separated string)
@@ -551,10 +555,11 @@ Validation checks:
 
 This section is intentionally redundant so a coding agent can implement the config layer quickly.
 
-- `tracker.kind`: string, required, currently `linear`
+- `tracker.kind`: string, required, currently `linear`, optional extension `local`
 - `tracker.endpoint`: string, default `https://api.linear.app/graphql` when `tracker.kind=linear`
 - `tracker.api_key`: string or `$VAR`, canonical env `LINEAR_API_KEY` when `tracker.kind=linear`
 - `tracker.project_slug`: string, required when `tracker.kind=linear`
+- `tracker.file`: path, optional extension for `tracker.kind=local`
 - `tracker.active_states`: list/string, default `Todo, In Progress`
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
 - `polling.interval_ms`: integer, default `30000`
@@ -1177,6 +1182,18 @@ Important:
 A non-Linear implementation may change transport details, but the normalized outputs must match the
 domain model in Section 4.
 
+### 11.2.1 Optional Local Task Platform Extension
+
+Implementations may provide a built-in local task platform that satisfies the same normalized issue
+model used by the orchestrator.
+
+Suggested behavior:
+
+- `tracker.kind == "local"`
+- tasks are loaded from a local store or transactional service rather than an external issue tracker
+- the platform may expose task CRUD APIs under the optional HTTP server extension
+- local task storage may be backed by files, PostgreSQL, or another implementation-defined adapter
+
 ### 11.3 Normalization Rules
 
 Candidate issue normalization should produce fields listed in Section 4.1.1.
@@ -1495,6 +1512,16 @@ Minimum endpoints:
   - If the issue is unknown to the current in-memory state, return `404` with an error response (for
     example `{\"error\":{\"code\":\"issue_not_found\",\"message\":\"...\"}}`).
 
+- `GET /api/v1/tasks` (optional task-platform extension)
+  - Returns the currently known task records and summary counts when the implementation provides a
+    built-in task platform.
+
+- `POST /api/v1/tasks` (optional task-platform extension)
+  - Creates a new task when the implementation provides a built-in task platform.
+
+- `PATCH /api/v1/tasks/<issue_identifier>` (optional task-platform extension)
+  - Updates a task when the implementation provides a built-in task platform.
+
 - `POST /api/v1/refresh`
   - Queues an immediate tracker poll + reconciliation cycle (best-effort trigger; implementations
     may coalesce repeated requests).
@@ -1519,6 +1546,18 @@ API design notes:
 - API errors should use a JSON envelope such as `{"error":{"code":"...","message":"..."}}`.
 - If the dashboard is a client-side app, it should consume this API rather than duplicating state
   logic.
+
+#### 13.7.3 Metrics Endpoint (`/metrics`)
+
+Implementations may expose a Prometheus-compatible metrics endpoint at `/metrics`.
+
+Suggested metrics include:
+
+- running session count
+- retry queue count
+- aggregate token usage
+- aggregate runtime seconds
+- task counts when a built-in task platform is present
 
 ## 14. Failure Model and Recovery Strategy
 

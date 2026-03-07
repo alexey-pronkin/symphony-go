@@ -57,6 +57,8 @@ type IssueDetail struct {
 	Attempts        AttemptInfo    `json:"attempts"`
 	Running         *RunningStatus `json:"running"`
 	Retry           *RetryStatus   `json:"retry"`
+	Logs            IssueLogs      `json:"logs"`
+	RecentEvents    []IssueEvent   `json:"recent_events"`
 	LastError       *string        `json:"last_error"`
 	Tracked         map[string]any `json:"tracked"`
 }
@@ -68,6 +70,16 @@ type WorkspaceInfo struct {
 type AttemptInfo struct {
 	RestartCount        int `json:"restart_count"`
 	CurrentRetryAttempt int `json:"current_retry_attempt"`
+}
+
+type IssueLogs struct {
+	CodexSessionLogs []IssueLogRef `json:"codex_session_logs"`
+}
+
+type IssueLogRef struct {
+	Label string  `json:"label"`
+	Path  string  `json:"path"`
+	URL   *string `json:"url"`
 }
 
 func (o *Orchestrator) Snapshot() Snapshot {
@@ -160,8 +172,13 @@ func (o *Orchestrator) Issue(identifier string) (IssueDetail, bool) {
 				RestartCount:        max(entry.RetryAttempt, 0),
 				CurrentRetryAttempt: max(entry.RetryAttempt, 0),
 			},
-			Running: runningStatusPtr(entry),
-			Tracked: map[string]any{},
+			Running:      runningStatusPtr(entry),
+			Logs:         logsFromEntry(entry),
+			RecentEvents: append([]IssueEvent(nil), entry.RecentEvents...),
+			Tracked: map[string]any{
+				"thread_id": entry.ThreadID,
+				"turn_id":   entry.TurnID,
+			},
 		}, true
 	}
 	for _, retry := range o.state.RetryAttempts {
@@ -184,9 +201,11 @@ func (o *Orchestrator) Issue(identifier string) (IssueDetail, bool) {
 				RestartCount:        retry.Attempt,
 				CurrentRetryAttempt: retry.Attempt,
 			},
-			Retry:     &status,
-			LastError: stringPtrOrNil(retry.Error),
-			Tracked:   map[string]any{},
+			Retry:        &status,
+			Logs:         IssueLogs{},
+			RecentEvents: nil,
+			LastError:    stringPtrOrNil(retry.Error),
+			Tracked:      map[string]any{},
 		}, true
 	}
 	return IssueDetail{}, false
@@ -228,4 +247,16 @@ func stringPtrOrNil(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func logsFromEntry(entry *RunningEntry) IssueLogs {
+	if entry == nil || entry.SessionLog == "" {
+		return IssueLogs{}
+	}
+	return IssueLogs{
+		CodexSessionLogs: []IssueLogRef{{
+			Label: "latest",
+			Path:  entry.SessionLog,
+		}},
+	}
 }

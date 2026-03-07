@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	ilog "github.com/alexey-pronkin/symphony-go/arpego/internal/logging"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/orchestrator"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/server"
+	"github.com/alexey-pronkin/symphony-go/arpego/internal/tracker"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/workflow"
 )
 
@@ -40,10 +43,12 @@ func RunArgs(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	trackerClient, taskPlatform := buildTrackerServices(cfg, workflowPath)
 	orc := orchestrator.New(orchestrator.Options{
 		Config:   cfg,
 		Workflow: def,
 		Logger:   logger,
+		Tracker:  trackerClient,
 	})
 	if err := orc.Start(ctx); err != nil {
 		return err
@@ -62,7 +67,7 @@ func RunArgs(args []string) error {
 
 	var httpServer *server.Server
 	if port, ok := resolvePort(cliPort, cliPortSet, def.Config); ok {
-		httpServer = server.New(orc, port)
+		httpServer = server.New(orc, taskPlatform, port, detectDashboardDir())
 		if err := httpServer.Start(); err != nil {
 			return fmt.Errorf("start http server: %w", err)
 		}
@@ -129,4 +134,41 @@ func closeQuietly(closer io.Closer) {
 	if closer != nil {
 		_ = closer.Close()
 	}
+}
+
+func detectDashboardDir() string {
+	candidates := []string{
+		filepath.Join("libretto", "dist"),
+		filepath.Join("..", "libretto", "dist"),
+	}
+	for _, candidate := range candidates {
+		indexPath := filepath.Join(candidate, "index.html")
+		if _, err := os.Stat(indexPath); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func buildTrackerServices(cfg config.Config, workflowPath string) (orchestrator.Tracker, server.TaskPlatform) {
+	if cfg.TrackerKind() != "local" {
+		return nil, nil
+	}
+	local := tracker.NewLocalPlatform(resolveTaskFile(workflowPath, cfg), cfg.TrackerProjectSlug())
+	return local, local
+}
+
+func resolveTaskFile(workflowPath string, cfg config.Config) string {
+	path := strings.TrimSpace(cfg.TrackerFile())
+	if path == "" {
+		path = "TASKS.yaml"
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	workflowAbs, err := filepath.Abs(workflowPath)
+	if err != nil {
+		return path
+	}
+	return filepath.Join(filepath.Dir(workflowAbs), path)
 }

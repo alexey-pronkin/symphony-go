@@ -44,6 +44,10 @@ func (c Config) TrackerProjectSlug() string {
 	return getString(c.section("tracker"), "project_slug", "")
 }
 
+func (c Config) TrackerFile() string {
+	return getString(c.section("tracker"), "file", "")
+}
+
 func (c Config) TrackerActiveStates() []string {
 	return getStringList(c.section("tracker"), "active_states", []string{"Todo", "In Progress"})
 }

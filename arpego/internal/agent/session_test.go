@@ -359,6 +359,127 @@ done
 	}
 }
 
+func TestRunnerReusesThreadForContinuationTurnsAndPassesFullIssueContext(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	workspacePath := filepath.Join(workspaceRoot, "SYM-1")
+	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	logPath := filepath.Join(workspaceRoot, "turns.log")
+	script := writeScript(t, workspaceRoot, `
+set -eu
+turn=0
+while IFS= read -r line; do
+  method=$(printf '%s' "$line" | sed -n 's/.*"method":"\([^"]*\)".*/\1/p')
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$method" in
+    initialize)
+      printf '{"id":%s,"result":{}}\n' "$id"
+      ;;
+    initialized)
+      ;;
+    thread/start)
+      printf '{"id":%s,"result":{"thread":{"id":"thread-1"}}}\n' "$id"
+      ;;
+    turn/start)
+      turn=$((turn + 1))
+      printf '%s\n' "$line" >> "$APP_LOG"
+      printf '{"id":%s,"result":{"turn":{"id":"turn-%s"}}}\n' "$id" "$turn"
+      printf '{"method":"turn/completed","params":{}}\n'
+      if [ "$turn" -ge 2 ]; then
+        exit 0
+      fi
+      ;;
+  esac
+done
+`)
+
+	cfg := config.New(map[string]any{
+		"workspace": map[string]any{"root": workspaceRoot},
+		"agent":     map[string]any{"max_turns": 2},
+		"codex":     map[string]any{"command": "sh " + script},
+	})
+
+	description := "A detailed issue"
+	priority := 2
+	blockerState := "Done"
+	runner := Runner{
+		Config: cfg,
+		ClientOptions: []ClientOption{
+			WithEnv(append(os.Environ(), "APP_LOG="+logPath)),
+			WithReadTimeout(500 * time.Millisecond),
+		},
+	}
+	issue := tracker.Issue{
+		ID:          "1",
+		Identifier:  "SYM-1",
+		Title:       "Runner Continuation Test",
+		Description: &description,
+		Priority:    &priority,
+		State:       "Todo",
+		Labels:      []string{"platform"},
+		BlockedBy: []tracker.BlockerRef{
+			{Identifier: ptr("SYM-0"), State: &blockerState},
+		},
+	}
+	def := &workflow.Definition{
+		PromptTemplate: `Issue {{ .Issue.identifier }} desc ` +
+			`{{ .Issue.description }} priority {{ .Issue.priority }} ` +
+			`blocker {{ index (index .Issue.blocked_by 0) "identifier" }}`,
+	}
+
+	var sessions []SessionStarted
+	refreshCount := 0
+	result, err := runner.Run(context.Background(), RunParams{
+		Issue:         issue,
+		WorkspacePath: workspacePath,
+		Workflow:      def,
+		OnSession: func(started SessionStarted) {
+			sessions = append(sessions, started)
+		},
+		RefreshIssue: func(context.Context, string) (tracker.Issue, bool, error) {
+			refreshCount++
+			return issue, refreshCount == 1, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !result.Completed {
+		t.Fatalf("expected completed result")
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("sessions len = %d want 2", len(sessions))
+	}
+	if sessions[0].ThreadID != sessions[1].ThreadID {
+		t.Fatalf("thread ids = %#v", sessions)
+	}
+	if sessions[0].TurnID == sessions[1].TurnID {
+		t.Fatalf("turn ids should differ: %#v", sessions)
+	}
+
+	lines := strings.Split(strings.TrimSpace(readFile(t, logPath)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("turn starts = %d want 2", len(lines))
+	}
+	firstStart := parseJSONLine(t, lines[0])
+	firstParams := firstStart["params"].(map[string]any)
+	firstInput := firstParams["input"].([]any)[0].(map[string]any)
+	if !strings.Contains(firstInput["text"].(string), "A detailed issue") {
+		t.Fatalf("first prompt missing full issue context: %q", firstInput["text"])
+	}
+	secondStart := parseJSONLine(t, lines[1])
+	secondParams := secondStart["params"].(map[string]any)
+	secondInput := secondParams["input"].([]any)[0].(map[string]any)
+	if secondInput["text"] == firstInput["text"] {
+		t.Fatalf("continuation turn resent first prompt")
+	}
+}
+
+func ptr(value string) *string {
+	return &value
+}
+
 func writeScript(t *testing.T, dir, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-codex.sh")

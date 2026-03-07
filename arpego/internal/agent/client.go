@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -22,6 +23,9 @@ type Client struct {
 	stderrDone  chan struct{}
 	readTimeout time.Duration
 	env         []string
+	logPath     string
+	logFile     io.WriteCloser
+	logMu       sync.Mutex
 	mu          sync.Mutex
 	closed      bool
 }
@@ -34,10 +38,24 @@ func WithReadTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) { c.readTimeout = timeout }
 }
 
+func WithProtocolLog(path string) ClientOption {
+	return func(c *Client) { c.logPath = path }
+}
+
 func NewClient(workspacePath, command string, opts ...ClientOption) (*Client, error) {
 	client := &Client{readTimeout: 5 * time.Second, stderrDone: make(chan struct{})}
 	for _, opt := range opts {
 		opt(client)
+	}
+	if client.logPath != "" {
+		if err := os.MkdirAll(filepath.Dir(client.logPath), 0o755); err != nil {
+			return nil, err
+		}
+		logFile, err := os.OpenFile(client.logPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		client.logFile = logFile
 	}
 	cmd := exec.Command("bash", "-lc", command)
 	cmd.Dir = workspacePath
@@ -83,6 +101,7 @@ func (c *Client) Send(v any) error {
 	if err != nil {
 		return err
 	}
+	c.logProtocol("out", data)
 	_, err = c.stdin.Write(append(data, '\n'))
 	return err
 }
@@ -109,10 +128,12 @@ func (c *Client) ReadLine(ctx context.Context, timeout time.Duration) ([]byte, e
 	case res := <-ch:
 		if res.err != nil {
 			if errors.Is(res.err, io.EOF) && len(res.line) > 0 {
+				c.logProtocol("in", res.line)
 				return res.line, nil
 			}
 			return nil, res.err
 		}
+		c.logProtocol("in", res.line)
 		return res.line, nil
 	}
 }
@@ -152,5 +173,25 @@ func (c *Client) Close() error {
 	}
 	<-c.stderrDone
 	_, _ = io.Copy(io.Discard, c.stdout)
+	if c.logFile != nil {
+		_ = c.logFile.Close()
+	}
 	return c.cmd.Wait()
+}
+
+func (c *Client) logProtocol(direction string, payload []byte) {
+	if c.logFile == nil {
+		return
+	}
+	c.logMu.Lock()
+	defer c.logMu.Unlock()
+	entry, err := json.Marshal(map[string]any{
+		"at":        time.Now().UTC(),
+		"direction": direction,
+		"payload":   string(payload),
+	})
+	if err != nil {
+		return
+	}
+	_, _ = c.logFile.Write(append(entry, '\n'))
 }

@@ -155,3 +155,16 @@ func bestEffortAfterRun(cfg config.Config, logger *slog.Logger, workspacePath st
 		}
 	}
 }
+
+func (o *Orchestrator) refreshIssueForContinuation(ctx context.Context, issueID string) (tracker.Issue, bool, error) {
+	issues, err := o.tracker.FetchStatesByIDs(ctx, []string{issueID})
+	if err != nil {
+		return tracker.Issue{}, false, err
+	}
+	if len(issues) == 0 {
+		return tracker.Issue{}, false, nil
+	}
+	issue := issues[0]
+	activeStates := stateSet(o.cfg.TrackerActiveStates())
+	return issue, activeStates[normalizeState(issue.State)], nil
+}

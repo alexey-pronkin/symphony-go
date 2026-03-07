@@ -29,24 +29,24 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error { return e.Cause }
 
 type BlockerRef struct {
-	ID         *string
-	Identifier *string
-	State      *string
+	ID         *string `json:"id,omitempty" yaml:"id,omitempty"`
+	Identifier *string `json:"identifier,omitempty" yaml:"identifier,omitempty"`
+	State      *string `json:"state,omitempty" yaml:"state,omitempty"`
 }
 
 type Issue struct {
-	ID          string
-	Identifier  string
-	Title       string
-	Description *string
-	Priority    *int
-	State       string
-	BranchName  *string
-	URL         *string
-	Labels      []string
-	BlockedBy   []BlockerRef
-	CreatedAt   *time.Time
-	UpdatedAt   *time.Time
+	ID          string       `json:"id" yaml:"id"`
+	Identifier  string       `json:"identifier" yaml:"identifier"`
+	Title       string       `json:"title" yaml:"title"`
+	Description *string      `json:"description,omitempty" yaml:"description,omitempty"`
+	Priority    *int         `json:"priority,omitempty" yaml:"priority,omitempty"`
+	State       string       `json:"state" yaml:"state"`
+	BranchName  *string      `json:"branch_name,omitempty" yaml:"branch_name,omitempty"`
+	URL         *string      `json:"url,omitempty" yaml:"url,omitempty"`
+	Labels      []string     `json:"labels" yaml:"labels"`
+	BlockedBy   []BlockerRef `json:"blocked_by" yaml:"blocked_by"`
+	CreatedAt   *time.Time   `json:"created_at,omitempty" yaml:"created_at,omitempty"`
+	UpdatedAt   *time.Time   `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
 }
 
 func NormalizeIssue(raw map[string]any) (Issue, error) {

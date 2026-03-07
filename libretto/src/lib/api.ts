@@ -68,6 +68,18 @@ export type IssueDetail = {
     due_at: string
     error: string
   } | null
+  logs: {
+    codex_session_logs: Array<{
+      label: string
+      path: string
+      url?: string | null
+    }>
+  }
+  recent_events: Array<{
+    at: string
+    event: string
+    message: string
+  }>
   last_error: string | null
   tracked: Record<string, unknown>
 }
@@ -83,6 +95,49 @@ export type TokenUsage = {
   input_tokens: number
   output_tokens: number
   total_tokens: number
+}
+
+export type TaskRecord = {
+  id: string
+  identifier: string
+  title: string
+  description?: string | null
+  priority?: number | null
+  state: string
+  branch_name?: string | null
+  url?: string | null
+  labels: string[]
+  blocked_by: Array<{
+    id?: string | null
+    identifier?: string | null
+    state?: string | null
+  }>
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type TaskListResponse = {
+  tasks: TaskRecord[]
+  counts: {
+    total: number
+    by_state: Record<string, number>
+  }
+}
+
+export type CreateTaskInput = {
+  title: string
+  description?: string
+  state?: string
+  priority?: number
+  labels?: string[]
+}
+
+export type UpdateTaskInput = {
+  title?: string
+  description?: string
+  state?: string
+  priority?: number
+  labels?: string[]
 }
 
 type FetchLike = typeof fetch
@@ -106,6 +161,21 @@ export function createSymphonyClient(options?: { baseUrl?: string; fetcher?: Fet
     },
     fetchIssue(issueIdentifier: string): Promise<IssueDetail> {
       return request<IssueDetail>(fetcher, `${baseUrl}/api/v1/${encodeURIComponent(issueIdentifier)}`)
+    },
+    fetchTasks(): Promise<TaskListResponse> {
+      return request<TaskListResponse>(fetcher, `${baseUrl}/api/v1/tasks`)
+    },
+    createTask(input: CreateTaskInput): Promise<TaskRecord> {
+      return request<TaskRecord>(fetcher, `${baseUrl}/api/v1/tasks`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    },
+    updateTask(identifier: string, input: UpdateTaskInput): Promise<TaskRecord> {
+      return request<TaskRecord>(fetcher, `${baseUrl}/api/v1/tasks/${encodeURIComponent(identifier)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      })
     },
     refresh(): Promise<RefreshResponse> {
       return request<RefreshResponse>(fetcher, `${baseUrl}/api/v1/refresh`, {
