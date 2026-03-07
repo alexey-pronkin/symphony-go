@@ -140,6 +140,75 @@ export type UpdateTaskInput = {
   labels?: string[]
 }
 
+export type DeliveryInsights = {
+  generated_at: string
+  summary: {
+    delivery_health: DeliveryMetricCard
+    flow_efficiency: DeliveryMetricCard
+    merge_readiness: DeliveryMetricCard
+    predictability: DeliveryMetricCard
+  }
+  tracker: {
+    total_tasks: number
+    active_tasks: number
+    blocked_tasks: number
+    review_tasks: number
+    done_last_window: number
+    avg_active_age_hours: number
+    backlog_pressure: number
+    runtime: {
+      running_sessions: number
+      retrying_sessions: number
+      active_tokens: number
+    }
+    agile: {
+      throughput_last_window: number
+      completion_ratio: number
+      review_load: number
+    }
+    kanban: {
+      wip_count: number
+      blocked_ratio: number
+      aging_work_ratio: number
+      flow_load: number
+    }
+  }
+  scm: {
+    active_sources: number
+    totals: {
+      branches: number
+      unmerged_branches: number
+      stale_branches: number
+      drift_commits: number
+      ahead_commits: number
+      max_age_hours: number
+    }
+    sources: Array<{
+      kind: string
+      name: string
+      repo_path: string
+      main_branch: string
+      branches: number
+      unmerged_branches: number
+      stale_branches: number
+      drift_commits: number
+      ahead_commits: number
+      max_age_hours: number
+      merge_readiness: number
+      warnings?: string[]
+    }>
+  }
+  warnings: string[]
+}
+
+export type DeliveryMetricCard = {
+  key: string
+  label: string
+  score: number
+  status: string
+  detail: string
+}
+
 type FetchLike = typeof fetch
 
 export function createSymphonyClient(options?: { baseUrl?: string; fetcher?: FetchLike }) {
@@ -164,6 +233,9 @@ export function createSymphonyClient(options?: { baseUrl?: string; fetcher?: Fet
     },
     fetchTasks(): Promise<TaskListResponse> {
       return request<TaskListResponse>(fetcher, `${baseUrl}/api/v1/tasks`)
+    },
+    fetchDeliveryInsights(): Promise<DeliveryInsights> {
+      return request<DeliveryInsights>(fetcher, `${baseUrl}/api/v1/insights/delivery`)
     },
     createTask(input: CreateTaskInput): Promise<TaskRecord> {
       return request<TaskRecord>(fetcher, `${baseUrl}/api/v1/tasks`, {

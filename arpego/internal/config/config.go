@@ -15,6 +15,13 @@ type Config struct {
 	raw map[string]any
 }
 
+type SCMSource struct {
+	Kind       string
+	Name       string
+	RepoPath   string
+	MainBranch string
+}
+
 // New wraps a parsed front matter map.
 // raw may be nil (treated as empty map).
 func New(raw map[string]any) Config {
@@ -42,6 +49,17 @@ func (c Config) TrackerAPIKey() string {
 
 func (c Config) TrackerProjectSlug() string {
 	return getString(c.section("tracker"), "project_slug", "")
+}
+
+func (c Config) TrackerStorage() string {
+	storage := strings.TrimSpace(getString(c.section("tracker"), "storage", ""))
+	if storage == "" {
+		if c.TrackerKind() == "local" {
+			return "file"
+		}
+		return ""
+	}
+	return strings.ToLower(storage)
 }
 
 func (c Config) TrackerFile() string {
@@ -150,6 +168,57 @@ func (c Config) CodexStallTimeoutMs() int64 {
 
 func (c Config) ServerPort() int {
 	return int(getInt64(c.section("server"), "port", 0))
+}
+
+// --- storage (extension) ---
+
+func (c Config) StoragePostgresDSN() string {
+	raw := getString(c.section("storage"), "postgres_dsn", "")
+	if strings.TrimSpace(raw) == "" {
+		return strings.TrimSpace(os.Getenv("SYMPHONY_POSTGRES_DSN"))
+	}
+	return resolveVar(raw)
+}
+
+// --- insights (extension) ---
+
+func (c Config) InsightsSCMSources() []SCMSource {
+	raw, _ := c.section("insights")["scm_sources"].([]any)
+	sources := make([]SCMSource, 0, len(raw))
+	for _, item := range raw {
+		m, _ := item.(map[string]any)
+		if m == nil {
+			continue
+		}
+		kind := strings.ToLower(strings.TrimSpace(getString(m, "kind", "")))
+		repoPath := expandPath(resolveVar(getString(m, "repo_path", "")))
+		if kind == "" || repoPath == "" {
+			continue
+		}
+		name := strings.TrimSpace(getString(m, "name", ""))
+		if name == "" {
+			name = filepath.Base(repoPath)
+		}
+		mainBranch := strings.TrimSpace(getString(m, "main_branch", "main"))
+		if mainBranch == "" {
+			mainBranch = "main"
+		}
+		sources = append(sources, SCMSource{
+			Kind:       kind,
+			Name:       name,
+			RepoPath:   repoPath,
+			MainBranch: mainBranch,
+		})
+	}
+	return sources
+}
+
+func (c Config) InsightsStaleBranchHours() int64 {
+	return getInt64(c.section("insights"), "stale_branch_hours", 72)
+}
+
+func (c Config) InsightsThroughputWindowDays() int64 {
+	return getInt64(c.section("insights"), "throughput_window_days", 7)
 }
 
 // --- helpers ---

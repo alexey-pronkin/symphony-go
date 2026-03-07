@@ -75,7 +75,7 @@ func (p *LocalPlatform) FetchStatesByIDs(_ context.Context, ids []string) ([]Iss
 	if len(ids) == 0 {
 		return []Issue{}, nil
 	}
-	issues, err := p.ListTasks()
+	issues, err := p.ListTasks(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (p *LocalPlatform) FetchStatesByIDs(_ context.Context, ids []string) ([]Iss
 	return filtered, nil
 }
 
-func (p *LocalPlatform) ListTasks() ([]Issue, error) {
+func (p *LocalPlatform) ListTasks(_ context.Context) ([]Issue, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	store, err := p.loadLocked()
@@ -104,7 +104,7 @@ func (p *LocalPlatform) ListTasks() ([]Issue, error) {
 	return issues, nil
 }
 
-func (p *LocalPlatform) CreateTask(input CreateTaskInput) (Issue, error) {
+func (p *LocalPlatform) CreateTask(_ context.Context, input CreateTaskInput) (Issue, error) {
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
 		return Issue{}, &TaskError{Code: ErrTaskValidation, Message: "title is required"}
@@ -138,7 +138,7 @@ func (p *LocalPlatform) CreateTask(input CreateTaskInput) (Issue, error) {
 	return issue, nil
 }
 
-func (p *LocalPlatform) UpdateTask(identifier string, input UpdateTaskInput) (Issue, error) {
+func (p *LocalPlatform) UpdateTask(_ context.Context, identifier string, input UpdateTaskInput) (Issue, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	store, err := p.loadLocked()
@@ -179,7 +179,7 @@ func (p *LocalPlatform) UpdateTask(identifier string, input UpdateTaskInput) (Is
 }
 
 func (p *LocalPlatform) filterByStates(states []string) ([]Issue, error) {
-	issues, err := p.ListTasks()
+	issues, err := p.ListTasks(context.Background())
 	if err != nil {
 		return nil, err
 	}

@@ -126,6 +126,66 @@ test('task endpoints use expected routes and payloads', async () => {
   assert.match(requests[2]?.body ?? '', /"state":"Done"/)
 })
 
+test('delivery insights endpoint uses expected route', async () => {
+  let requestUrl = ''
+  const client = createSymphonyClient({
+    fetcher: async (input) => {
+      requestUrl = String(input)
+      return jsonResponse({
+        generated_at: '2026-03-07T12:00:00Z',
+        summary: {
+          delivery_health: { key: 'delivery_health', label: 'Delivery health', score: 80, status: 'strong', detail: '' },
+          flow_efficiency: { key: 'flow_efficiency', label: 'Flow efficiency', score: 70, status: 'watch', detail: '' },
+          merge_readiness: { key: 'merge_readiness', label: 'Merge readiness', score: 60, status: 'watch', detail: '' },
+          predictability: { key: 'predictability', label: 'Predictability', score: 75, status: 'watch', detail: '' },
+        },
+        tracker: {
+          total_tasks: 1,
+          active_tasks: 1,
+          blocked_tasks: 0,
+          review_tasks: 0,
+          done_last_window: 0,
+          avg_active_age_hours: 5,
+          backlog_pressure: 1,
+          runtime: {
+            running_sessions: 1,
+            retrying_sessions: 0,
+            active_tokens: 3,
+          },
+          agile: {
+            throughput_last_window: 0,
+            completion_ratio: 0,
+            review_load: 0,
+          },
+          kanban: {
+            wip_count: 1,
+            blocked_ratio: 0,
+            aging_work_ratio: 0.1,
+            flow_load: 0.5,
+          },
+        },
+        scm: {
+          active_sources: 0,
+          totals: {
+            branches: 0,
+            unmerged_branches: 0,
+            stale_branches: 0,
+            drift_commits: 0,
+            ahead_commits: 0,
+            max_age_hours: 0,
+          },
+          sources: [],
+        },
+        warnings: ['scm metrics degraded'],
+      })
+    },
+  })
+
+  const payload = await client.fetchDeliveryInsights()
+  assert.equal(requestUrl, '/api/v1/insights/delivery')
+  assert.equal(payload.summary.delivery_health.score, 80)
+})
+
 test('request surfaces structured API errors', async () => {
   const client = createSymphonyClient({
     fetcher: async () =>

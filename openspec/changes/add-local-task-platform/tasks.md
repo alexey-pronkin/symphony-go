@@ -1,8 +1,8 @@
 ## 1. Architecture And Persistence Ports
 
-- [ ] 1.1 Define hexagonal ports for task persistence, task queries, runtime event sinks, and metrics export
-- [ ] 1.2 Add failing backend tests for Postgres-backed task CRUD and DB-agnostic service contracts
-- [ ] 1.3 Introduce the Postgres adapter for transactional task storage
+- [x] 1.1 Define hexagonal ports for task persistence, task queries, runtime event sinks, and metrics export
+- [x] 1.2 Add failing backend tests for Postgres-backed task CRUD and DB-agnostic service contracts
+- [x] 1.3 Introduce the Postgres adapter for transactional task storage
 
 ## 2. Analytics And Observability
 

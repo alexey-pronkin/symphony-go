@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexey-pronkin/symphony-go/arpego/internal/insights"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/orchestrator"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/tracker"
 )
@@ -38,7 +40,7 @@ func TestStateEndpointReturnsSummary(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/state", nil)
 	rec := httptest.NewRecorder()
-	NewHandler(runtime, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, nil, nil, "").ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d want 200", rec.Code)
@@ -75,14 +77,14 @@ func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/MT-649", nil)
 	rec := httptest.NewRecorder()
-	NewHandler(runtime, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, nil, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("known status = %d want 200", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/MT-999", nil)
 	rec = httptest.NewRecorder()
-	NewHandler(runtime, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, nil, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown status = %d want 404", rec.Code)
 	}
@@ -98,7 +100,7 @@ func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
 
 func TestRefreshEndpointQueuesPollAndMethodNotAllowed(t *testing.T) {
 	runtime := &fakeRuntime{}
-	handler := NewHandler(runtime, nil, "")
+	handler := NewHandler(runtime, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/refresh", nil)
 	rec := httptest.NewRecorder()
@@ -123,7 +125,7 @@ func TestDashboardRootServesBuiltIndexWhenAvailable(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	NewHandler(&fakeRuntime{}, nil, dashboardDir).ServeHTTP(rec, req)
+	NewHandler(&fakeRuntime{}, nil, nil, dashboardDir).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d want 200", rec.Code)
@@ -135,7 +137,7 @@ func TestDashboardRootServesBuiltIndexWhenAvailable(t *testing.T) {
 
 func TestDashboardServesStaticAssetsAndSpaFallback(t *testing.T) {
 	dashboardDir := writeDashboardFiles(t)
-	handler := NewHandler(&fakeRuntime{}, nil, dashboardDir)
+	handler := NewHandler(&fakeRuntime{}, nil, nil, dashboardDir)
 
 	assetReq := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
 	assetRec := httptest.NewRecorder()
@@ -160,7 +162,7 @@ func TestDashboardServesStaticAssetsAndSpaFallback(t *testing.T) {
 
 func TestDashboardMissingAssetReturns404AndFallbackPlaceholder(t *testing.T) {
 	dashboardDir := writeDashboardFiles(t)
-	handler := NewHandler(&fakeRuntime{}, nil, dashboardDir)
+	handler := NewHandler(&fakeRuntime{}, nil, nil, dashboardDir)
 
 	req := httptest.NewRequest(http.MethodGet, "/assets/missing.js", nil)
 	rec := httptest.NewRecorder()
@@ -171,7 +173,7 @@ func TestDashboardMissingAssetReturns404AndFallbackPlaceholder(t *testing.T) {
 
 	fallbackReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	fallbackRec := httptest.NewRecorder()
-	NewHandler(&fakeRuntime{}, nil, "").ServeHTTP(fallbackRec, fallbackReq)
+	NewHandler(&fakeRuntime{}, nil, nil, "").ServeHTTP(fallbackRec, fallbackReq)
 	if fallbackRec.Code != http.StatusOK {
 		t.Fatalf("fallback status = %d want 200", fallbackRec.Code)
 	}
@@ -188,7 +190,7 @@ func TestTaskPlatformEndpointsListCreateUpdateAndUnavailable(t *testing.T) {
 		createdTask: tracker.Issue{ID: "task-2", Identifier: "SYM-2", Title: "Created", State: "Todo"},
 		updatedTask: tracker.Issue{ID: "task-1", Identifier: "SYM-1", Title: "Local task", State: "Done"},
 	}
-	handler := NewHandler(&fakeRuntime{}, platform, "")
+	handler := NewHandler(&fakeRuntime{}, platform, nil, "")
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	listRec := httptest.NewRecorder()
@@ -229,7 +231,7 @@ func TestTaskPlatformEndpointsListCreateUpdateAndUnavailable(t *testing.T) {
 		t.Fatalf("last update identifier = %q", platform.lastUpdateIdentifier)
 	}
 
-	unavailable := NewHandler(&fakeRuntime{}, nil, "")
+	unavailable := NewHandler(&fakeRuntime{}, nil, nil, "")
 	unavailableReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	unavailableRec := httptest.NewRecorder()
 	unavailable.ServeHTTP(unavailableRec, unavailableReq)
@@ -257,8 +259,7 @@ func TestMetricsEndpointExportsRuntimeAndTaskCounts(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
 
-	NewHandler(runtime, platform, "").ServeHTTP(rec, req)
-
+	NewHandler(runtime, platform, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d want 200", rec.Code)
 	}
@@ -268,6 +269,33 @@ func TestMetricsEndpointExportsRuntimeAndTaskCounts(t *testing.T) {
 	}
 	if !strings.Contains(body, "symphony_tasks_total 2") {
 		t.Fatalf("metrics body missing task count: %q", body)
+	}
+}
+
+func TestDeliveryInsightsEndpointReturnsReport(t *testing.T) {
+	handler := NewHandler(&fakeRuntime{}, nil, fakeDeliveryInsights{
+		report: insights.DeliveryReport{
+			Summary: insights.DeliverySummary{
+				DeliveryHealth: insights.IntegralMetric{Score: 81, Status: "strong"},
+			},
+			Warnings: []string{"scm metrics degraded"},
+		},
+	}, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/insights/delivery", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d want 200", rec.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	summary := payload["summary"].(map[string]any)
+	health := summary["delivery_health"].(map[string]any)
+	if health["score"] != float64(81) {
+		t.Fatalf("delivery health = %#v", health)
 	}
 }
 
@@ -299,16 +327,29 @@ type fakeTaskPlatform struct {
 	lastUpdateIdentifier string
 }
 
-func (f *fakeTaskPlatform) ListTasks() ([]tracker.Issue, error) {
+type fakeDeliveryInsights struct {
+	report insights.DeliveryReport
+	err    error
+}
+
+func (f fakeDeliveryInsights) Delivery(context.Context) (insights.DeliveryReport, error) {
+	return f.report, f.err
+}
+
+func (f *fakeTaskPlatform) ListTasks(context.Context) ([]tracker.Issue, error) {
 	return f.listTasks, nil
 }
 
-func (f *fakeTaskPlatform) CreateTask(input tracker.CreateTaskInput) (tracker.Issue, error) {
+func (f *fakeTaskPlatform) CreateTask(_ context.Context, input tracker.CreateTaskInput) (tracker.Issue, error) {
 	f.lastCreate = input
 	return f.createdTask, nil
 }
 
-func (f *fakeTaskPlatform) UpdateTask(identifier string, input tracker.UpdateTaskInput) (tracker.Issue, error) {
+func (f *fakeTaskPlatform) UpdateTask(
+	_ context.Context,
+	identifier string,
+	input tracker.UpdateTaskInput,
+) (tracker.Issue, error) {
 	f.lastUpdateIdentifier = identifier
 	f.lastUpdate = input
 	return f.updatedTask, nil

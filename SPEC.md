@@ -352,6 +352,9 @@ Fields:
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `project_slug` (string)
   - Required for dispatch when `tracker.kind == "linear"`.
+- `storage` (string, optional extension)
+  - Used by `tracker.kind == "local"` implementations to select the task storage adapter.
+  - Suggested values: `file` (default), `postgres`
 - `file` (path string, optional extension)
   - Used by `tracker.kind == "local"` implementations to resolve a task store file.
   - A local tracker may default this path relative to the selected `WORKFLOW.md`.
@@ -367,6 +370,33 @@ Fields:
 - `interval_ms` (integer or string integer)
   - Default: `30000`
   - Changes should be re-applied at runtime and affect future tick scheduling without restart.
+
+#### 5.3.7 `storage` (object, optional extension)
+
+Fields:
+
+- `postgres_dsn` (string or `$VAR_NAME`)
+  - Used by `tracker.kind == "local"` with `tracker.storage == "postgres"`.
+  - Implementations may also support a canonical environment variable such as
+    `SYMPHONY_POSTGRES_DSN`.
+
+#### 5.3.8 `insights` (object, optional extension)
+
+Fields:
+
+- `scm_sources` (list of objects)
+  - Optional delivery-metrics source definitions for SCM/gitflow analysis.
+  - Each source may include:
+    - `kind`: provider label such as `github`, `gitlab`, or `gitverse`
+    - `name`: human-readable source label
+    - `repo_path`: local repository path used for inspection
+    - `main_branch`: branch used as the merge baseline, default `main`
+- `stale_branch_hours` (integer or string integer)
+  - Default: `72`
+  - Used by delivery metrics to classify stale branches.
+- `throughput_window_days` (integer or string integer)
+  - Default: `7`
+  - Used by delivery metrics to compute recent throughput.
 
 #### 5.3.3 `workspace` (object)
 
@@ -549,6 +579,7 @@ Validation checks:
 - `tracker.kind` is present and supported.
 - `tracker.api_key` is present after `$` resolution.
 - `tracker.project_slug` is present when required by the selected tracker kind.
+- `storage.postgres_dsn` is present when required by the selected local storage mode.
 - `codex.command` is present and non-empty.
 
 ### 6.4 Config Fields Summary (Cheat Sheet)
@@ -559,7 +590,12 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.endpoint`: string, default `https://api.linear.app/graphql` when `tracker.kind=linear`
 - `tracker.api_key`: string or `$VAR`, canonical env `LINEAR_API_KEY` when `tracker.kind=linear`
 - `tracker.project_slug`: string, required when `tracker.kind=linear`
+- `tracker.storage`: string, optional extension for `tracker.kind=local`, default `file`
 - `tracker.file`: path, optional extension for `tracker.kind=local`
+- `storage.postgres_dsn`: string or `$VAR`, optional extension for local Postgres storage
+- `insights.scm_sources`: list of SCM source objects for delivery metrics
+- `insights.stale_branch_hours`: integer, default `72`
+- `insights.throughput_window_days`: integer, default `7`
 - `tracker.active_states`: list/string, default `Todo, In Progress`
 - `tracker.terminal_states`: list/string, default `Closed, Cancelled, Canceled, Duplicate, Done`
 - `polling.interval_ms`: integer, default `30000`
@@ -1191,6 +1227,7 @@ Suggested behavior:
 
 - `tracker.kind == "local"`
 - tasks are loaded from a local store or transactional service rather than an external issue tracker
+- `tracker.storage` may select an implementation-specific local adapter such as `file` or `postgres`
 - the platform may expose task CRUD APIs under the optional HTTP server extension
 - local task storage may be backed by files, PostgreSQL, or another implementation-defined adapter
 
@@ -1506,6 +1543,46 @@ Minimum endpoints:
       ],
       "last_error": null,
       "tracked": {}
+    }
+    ```
+
+- `GET /api/v1/insights/delivery` (optional delivery-metrics extension)
+  - Returns a compact delivery-metrics payload combining tracker/task-flow signals with SCM gitflow
+    signals.
+  - Implementations should tolerate missing or degraded SCM sources and still return the available
+    task-flow metrics plus warning messages.
+  - Suggested response shape:
+
+    ```json
+    {
+      "generated_at": "2026-03-07T12:00:00Z",
+      "summary": {
+        "delivery_health": { "key": "delivery_health", "label": "Delivery health", "score": 81, "status": "strong", "detail": "2 active tasks, 1 blocked, 0 retrying sessions." },
+        "flow_efficiency": { "key": "flow_efficiency", "label": "Flow efficiency", "score": 76, "status": "watch", "detail": "3 completed in window, review load 20%." },
+        "merge_readiness": { "key": "merge_readiness", "label": "Merge readiness", "score": 69, "status": "watch", "detail": "2 unmerged branches, 4 drift commits." },
+        "predictability": { "key": "predictability", "label": "Predictability", "score": 73, "status": "watch", "detail": "completion ratio 42%, backlog pressure 1.2x." }
+      },
+      "tracker": {
+        "total_tasks": 8,
+        "active_tasks": 2,
+        "blocked_tasks": 1,
+        "review_tasks": 1,
+        "done_last_window": 3,
+        "avg_active_age_hours": 18.0,
+        "backlog_pressure": 1.2
+      },
+      "scm": {
+        "active_sources": 1,
+        "totals": {
+          "branches": 3,
+          "unmerged_branches": 2,
+          "stale_branches": 1,
+          "drift_commits": 4,
+          "ahead_commits": 3,
+          "max_age_hours": 96.0
+        }
+      },
+      "warnings": ["scm metrics degraded: no SCM sources configured"]
     }
     ```
 

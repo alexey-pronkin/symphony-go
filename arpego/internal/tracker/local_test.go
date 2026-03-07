@@ -12,7 +12,7 @@ func TestLocalPlatformFetchesAndPersistsTasks(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "TASKS.yaml")
 	platform := tracker.NewLocalPlatform(path, "SYM")
 
-	created, err := platform.CreateTask(tracker.CreateTaskInput{
+	created, err := platform.CreateTask(context.Background(), tracker.CreateTaskInput{
 		Title:  "Build local tracker",
 		State:  "Todo",
 		Labels: []string{"Platform", "Urgent"},
@@ -36,7 +36,7 @@ func TestLocalPlatformFetchesAndPersistsTasks(t *testing.T) {
 	}
 
 	nextState := "In Progress"
-	updated, err := platform.UpdateTask("SYM-1", tracker.UpdateTaskInput{State: &nextState})
+	updated, err := platform.UpdateTask(context.Background(), "SYM-1", tracker.UpdateTaskInput{State: &nextState})
 	if err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}

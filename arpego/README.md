@@ -52,6 +52,7 @@ When enabled through `server.port` or `--port`, the server binds to loopback and
 - `GET /metrics`
 - `GET /api/v1/state`
 - `GET /api/v1/{issue_identifier}`
+- `GET /api/v1/insights/delivery`
 - `GET /api/v1/tasks`
 - `POST /api/v1/tasks`
 - `PATCH /api/v1/tasks/{issue_identifier}`
@@ -68,12 +69,18 @@ curl -sS http://127.0.0.1:18080/api/v1/state
 Arpego now supports a built-in local task platform with:
 
 - `tracker.kind: local`
+- optional `tracker.storage: file|postgres` selector
 - optional `tracker.file` task-store path
+- optional `storage.postgres_dsn` or `SYMPHONY_POSTGRES_DSN` for Postgres-backed local storage
 - task CRUD APIs under `/api/v1/tasks`
 - a Libretto UI that can create and move tasks while still showing runtime state
 
 If `tracker.file` is omitted in local mode, Arpego resolves `TASKS.yaml` relative
 to the selected `WORKFLOW.md`.
+
+If `tracker.storage` is omitted in local mode, Arpego uses the file-backed
+adapter. When `tracker.storage: postgres` is selected, Arpego uses the
+transactional Postgres adapter implemented with GORM.
 
 Minimal local example:
 
@@ -82,6 +89,22 @@ Minimal local example:
 tracker:
   kind: local
   project_slug: sym
+server:
+  port: 18080
+---
+Work on the selected Symphony task.
+```
+
+Postgres-backed local example:
+
+```yaml
+---
+tracker:
+  kind: local
+  storage: postgres
+  project_slug: sym
+storage:
+  postgres_dsn: $SYMPHONY_POSTGRES_DSN
 server:
   port: 18080
 ---
@@ -108,6 +131,49 @@ Prometheus scrapes `GET /metrics` from Arpego. The compose workflow under
 [`docker/WORKFLOW.compose.md`](/Users/pav/Documents/git/github/symphony-go/docker/WORKFLOW.compose.md)
 uses the local task platform so the stack can boot without external tracker
 credentials.
+
+## Delivery Metrics
+
+Libretto now also consumes `GET /api/v1/insights/delivery` for a compact
+delivery dashboard with:
+
+- integral metrics: delivery health, flow efficiency, merge readiness, predictability
+- agile-oriented task signals: throughput, completion ratio, review load
+- kanban-oriented task signals: WIP, blocked ratio, aging work, flow load
+- SCM gitflow signals grouped by configured source
+
+SCM sources are configured under `insights.scm_sources` and can be labeled as
+`github`, `gitlab`, or `gitverse`. The current implementation inspects local git
+repositories through `go-git`, so the same collection path works for hosted and
+self-hosted remotes.
+
+Example:
+
+```yaml
+---
+tracker:
+  kind: local
+  storage: postgres
+  project_slug: sym
+storage:
+  postgres_dsn: $SYMPHONY_POSTGRES_DSN
+insights:
+  stale_branch_hours: 72
+  throughput_window_days: 7
+  scm_sources:
+    - kind: github
+      name: symphony-core
+      repo_path: ~/src/symphony-go
+      main_branch: main
+    - kind: gitlab
+      name: internal-platform
+      repo_path: ~/src/internal-platform
+      main_branch: master
+server:
+  port: 18080
+---
+Work on the selected Symphony task.
+```
 
 ## Dashboard Serving
 
