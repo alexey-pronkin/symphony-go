@@ -289,11 +289,13 @@ func TestReconcileRunningStalledSchedulesRetry(t *testing.T) {
 
 func TestWorkerAccountingTracksSessionIDTokensAndRuntime(t *testing.T) {
 	now := time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC)
+	sink := &fakeRuntimeEventSink{}
 	orc := testOrchestrator(t, testDeps{
 		cfg: config.New(map[string]any{
 			"agent": map[string]any{"max_retry_backoff_ms": 300_000},
 		}),
-		now: func() time.Time { return now },
+		events: sink,
+		now:    func() time.Time { return now },
 	})
 	orc.state = State{
 		Running: map[string]*RunningEntry{
@@ -354,11 +356,21 @@ func TestWorkerAccountingTracksSessionIDTokensAndRuntime(t *testing.T) {
 	if retry := orc.state.RetryAttempts["issue-1"]; retry.Attempt != 1 {
 		t.Fatalf("continuation retry attempt = %d want 1", retry.Attempt)
 	}
+	if len(sink.events) != 4 {
+		t.Fatalf("runtime events = %d want 4", len(sink.events))
+	}
+	if sink.events[0].Name != "session.started" {
+		t.Fatalf("first runtime event = %#v", sink.events[0])
+	}
+	if sink.events[len(sink.events)-1].Name != "worker.completed" {
+		t.Fatalf("last runtime event = %#v", sink.events[len(sink.events)-1])
+	}
 }
 
 type testDeps struct {
 	cfg     config.Config
 	tracker *fakeTracker
+	events  *fakeRuntimeEventSink
 	now     func() time.Time
 }
 
@@ -370,6 +382,7 @@ func testOrchestrator(t *testing.T, deps testDeps) *Orchestrator {
 		Config:  deps.cfg,
 		Logger:  logger,
 		Tracker: deps.tracker,
+		Events:  deps.events,
 		Now:     deps.now,
 		AfterFunc: func(time.Duration, func()) timerHandle {
 			return noopTimer{}
@@ -391,6 +404,11 @@ type fakeTracker struct {
 	byIDs      func(context.Context, []string) ([]tracker.Issue, error)
 }
 
+type fakeRuntimeEventSink struct {
+	events []tracker.RuntimeEvent
+	err    error
+}
+
 func (f *fakeTracker) FetchCandidates(ctx context.Context, states []string) ([]tracker.Issue, error) {
 	if f.candidates == nil {
 		return nil, nil
@@ -410,6 +428,11 @@ func (f *fakeTracker) FetchStatesByIDs(ctx context.Context, ids []string) ([]tra
 		return nil, nil
 	}
 	return f.byIDs(ctx, ids)
+}
+
+func (f *fakeRuntimeEventSink) AppendRuntimeEvent(_ context.Context, event tracker.RuntimeEvent) error {
+	f.events = append(f.events, event)
+	return f.err
 }
 
 func mustTime(t *testing.T, value string) time.Time {

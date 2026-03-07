@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -31,6 +32,7 @@ type Options struct {
 	Workflow  *workflow.Definition
 	Logger    *slog.Logger
 	Tracker   Tracker
+	Events    tracker.RuntimeEventSink
 	Runner    Runner
 	Now       func() time.Time
 	AfterFunc func(time.Duration, func()) timerHandle
@@ -42,6 +44,7 @@ type Orchestrator struct {
 	workflow  *workflow.Definition
 	logger    *slog.Logger
 	tracker   Tracker
+	events    tracker.RuntimeEventSink
 	runner    Runner
 	now       func() time.Time
 	afterFunc func(time.Duration, func()) timerHandle
@@ -83,6 +86,7 @@ func New(opts Options) *Orchestrator {
 		workflow:  opts.Workflow,
 		logger:    logger,
 		tracker:   opts.Tracker,
+		events:    opts.Events,
 		runner:    opts.Runner,
 		now:       now,
 		afterFunc: afterFunc,
@@ -265,12 +269,12 @@ func (o *Orchestrator) dispatchIssue(ctx context.Context, issue tracker.Issue, a
 
 func (o *Orchestrator) handleWorkerResult(result workerResult) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	if o.state.Completed == nil {
 		o.state.Completed = map[string]struct{}{}
 	}
 	entry, ok := o.state.Running[result.IssueID]
 	if !ok {
+		o.mu.Unlock()
 		return
 	}
 
@@ -279,20 +283,36 @@ func (o *Orchestrator) handleWorkerResult(result workerResult) {
 		entry.CurrentUsage = result.Result.Usage
 	}
 	o.finishRuntime(entry, o.now())
+	runtimeEvent := tracker.RuntimeEvent{
+		IssueID:    entry.Issue.ID,
+		Identifier: entry.Issue.Identifier,
+		ObservedAt: o.now(),
+		SessionID:  entry.SessionID,
+		Workspace:  entry.WorkspacePath,
+		LogPath:    entry.SessionLog,
+	}
 
 	if result.Err == nil && result.Result.Completed {
 		o.state.Completed[result.IssueID] = struct{}{}
 		o.scheduleRetry(entry.Issue, 1, true, "continuation")
+		runtimeEvent.Name = "worker.completed"
+		runtimeEvent.Message = "worker completed successfully"
+		o.mu.Unlock()
+		o.appendRuntimeEvent(runtimeEvent)
 		return
 	}
 	o.scheduleRetry(entry.Issue, nextRetryAttempt(entry.RetryAttempt), false, fmt.Sprintf("worker failed: %v", result.Err))
+	runtimeEvent.Name = "worker.failed"
+	runtimeEvent.Message = fmt.Sprintf("worker failed: %v", result.Err)
+	o.mu.Unlock()
+	o.appendRuntimeEvent(runtimeEvent)
 }
 
 func (o *Orchestrator) recordSession(issue tracker.Issue, started agent.SessionStarted) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	entry, ok := o.state.Running[issue.ID]
 	if !ok {
+		o.mu.Unlock()
 		return
 	}
 	entry.ThreadID = started.ThreadID
@@ -301,13 +321,29 @@ func (o *Orchestrator) recordSession(issue tracker.Issue, started agent.SessionS
 	entry.SessionLog = started.LogPath
 	entry.TurnCount++
 	ilog.WithSession(ilog.WithIssue(o.logger, issue.ID, issue.Identifier), entry.SessionID).Info("session outcome=started")
+	runtimeEvent := tracker.RuntimeEvent{
+		IssueID:    issue.ID,
+		Identifier: issue.Identifier,
+		Name:       "session.started",
+		Message:    "session started",
+		ObservedAt: o.now(),
+		SessionID:  entry.SessionID,
+		Workspace:  entry.WorkspacePath,
+		LogPath:    entry.SessionLog,
+		MetadataRaw: mustMarshalRuntimeMetadata(map[string]any{
+			"thread_id": started.ThreadID,
+			"turn_id":   started.TurnID,
+		}),
+	}
+	o.mu.Unlock()
+	o.appendRuntimeEvent(runtimeEvent)
 }
 
 func (o *Orchestrator) recordEvent(issueID string, event agent.Event) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	entry, ok := o.state.Running[issueID]
 	if !ok {
+		o.mu.Unlock()
 		return
 	}
 	now := o.now()
@@ -336,6 +372,19 @@ func (o *Orchestrator) recordEvent(issueID string, event agent.Event) {
 	if limits := extractRateLimits(event.Payload); limits != nil {
 		o.state.CodexRateLimits = limits
 	}
+	runtimeEvent := tracker.RuntimeEvent{
+		IssueID:     entry.Issue.ID,
+		Identifier:  entry.Issue.Identifier,
+		Name:        event.Method,
+		Message:     summarizeEvent(event),
+		ObservedAt:  now,
+		SessionID:   entry.SessionID,
+		Workspace:   entry.WorkspacePath,
+		LogPath:     entry.SessionLog,
+		MetadataRaw: mustMarshalRuntimeMetadata(event.Payload),
+	}
+	o.mu.Unlock()
+	o.appendRuntimeEvent(runtimeEvent)
 }
 
 func appendRecentEvent(events []IssueEvent, event IssueEvent) []IssueEvent {
@@ -356,6 +405,38 @@ func summarizeEvent(event agent.Event) string {
 		}
 	}
 	return event.Method
+}
+
+func (o *Orchestrator) appendRuntimeEvent(event tracker.RuntimeEvent) {
+	if o == nil || o.events == nil {
+		return
+	}
+	ctx := context.Background()
+	if o.ctx != nil {
+		ctx = o.ctx
+	}
+	if err := o.events.AppendRuntimeEvent(ctx, event); err != nil {
+		o.logger.Warn(
+			"observability outcome=runtime_event_append_failed",
+			"issue_identifier",
+			event.Identifier,
+			"event",
+			event.Name,
+			"reason",
+			err,
+		)
+	}
+}
+
+func mustMarshalRuntimeMetadata(payload map[string]any) []byte {
+	if len(payload) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 func (o *Orchestrator) applyConfigLocked(cfg config.Config) {

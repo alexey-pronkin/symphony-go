@@ -49,11 +49,17 @@ func RunArgs(args []string) error {
 		return err
 	}
 	defer closeQuietly(trackerCloser)
+	eventSink, observability, observabilityCloser, err := buildObservabilityServices(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(observabilityCloser)
 	orc := orchestrator.New(orchestrator.Options{
 		Config:   cfg,
 		Workflow: def,
 		Logger:   logger,
 		Tracker:  trackerClient,
+		Events:   eventSink,
 	})
 	if err := orc.Start(ctx); err != nil {
 		return err
@@ -76,6 +82,7 @@ func RunArgs(args []string) error {
 			orc,
 			taskPlatform,
 			buildDeliveryInsights(cfg, taskPlatform, orc),
+			observability,
 			port,
 			detectDashboardDir(),
 		)
@@ -203,6 +210,24 @@ func buildTrackerServices(
 	local := tracker.NewLocalPlatform(resolveTaskFile(workflowPath, cfg), cfg.TrackerProjectSlug())
 	service := tracker.NewTaskService(local, local)
 	return service, service, nil, nil
+}
+
+func buildObservabilityServices(
+	ctx context.Context,
+	cfg config.Config,
+) (tracker.RuntimeEventSink, server.Observability, io.Closer, error) {
+	if strings.TrimSpace(cfg.StorageClickHouseDSN()) == "" {
+		return nil, nil, nil, nil
+	}
+	store, err := tracker.OpenClickHouseObservability(
+		ctx,
+		cfg.StorageClickHouseDSN(),
+		cfg.TrackerProjectSlug(),
+	)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("open clickhouse observability: %w", err)
+	}
+	return store, store, store, nil
 }
 
 func resolveTaskFile(workflowPath string, cfg config.Config) string {

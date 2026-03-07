@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --experimental-strip-types --test src/lib/api.test.ts src/lib/delivery-insights.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/api.test.ts src/lib/delivery-insights.test.ts src/lib/task-board.test.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

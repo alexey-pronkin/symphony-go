@@ -72,6 +72,7 @@ Arpego now supports a built-in local task platform with:
 - optional `tracker.storage: file|postgres` selector
 - optional `tracker.file` task-store path
 - optional `storage.postgres_dsn` or `SYMPHONY_POSTGRES_DSN` for Postgres-backed local storage
+- optional `storage.clickhouse_dsn` or `SYMPHONY_CLICKHOUSE_DSN` for persisted runtime-event history
 - task CRUD APIs under `/api/v1/tasks`
 - a Libretto UI that can create and move tasks while still showing runtime state
 
@@ -131,6 +132,11 @@ Prometheus scrapes `GET /metrics` from Arpego. The compose workflow under
 [`docker/WORKFLOW.compose.md`](/Users/pav/Documents/git/github/symphony-go/docker/WORKFLOW.compose.md)
 uses the local task platform so the stack can boot without external tracker
 credentials.
+
+When `storage.clickhouse_dsn` is configured, Arpego also persists runtime
+events to ClickHouse and uses them to enrich `GET /api/v1/{issue_identifier}`
+with recent event history and session-log references beyond the in-memory
+runtime ring.
 
 ## Delivery Metrics
 
