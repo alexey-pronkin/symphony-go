@@ -92,6 +92,12 @@
   gap: 18px;
 }
 
+.delivery-alert-filter-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .delivery-card-grid,
 .delivery-alert-list,
 .delivery-breakdown-grid,

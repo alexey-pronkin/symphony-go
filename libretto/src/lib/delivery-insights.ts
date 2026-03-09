@@ -6,6 +6,16 @@ export type DeliveryRollupAlert = {
   detail: string
 }
 
+export function filterDeliveryRollupAlerts(
+  alerts: DeliveryRollupAlert[],
+  severity: 'all' | DeliveryRollupAlert['severity']
+): DeliveryRollupAlert[] {
+  if (severity === 'all') {
+    return alerts
+  }
+  return alerts.filter((alert) => alert.severity === severity)
+}
+
 export function orderedDeliveryCards(report: DeliveryInsights): DeliveryMetricCard[] {
   return [report.summary.delivery_health, report.summary.flow_efficiency, report.summary.merge_readiness, report.summary.predictability]
 }
