@@ -1,5 +1,12 @@
+import { useState } from 'react'
 import type { DeliveryInsights, DeliveryTrendReport } from '../lib/api'
-import { buildDeliveryRollupAlerts, deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
+import {
+  buildDeliveryRollupAlerts,
+  deliveryObservabilityState,
+  filterDeliveryRollupAlerts,
+  hasDeliveryWarnings,
+  orderedDeliveryCards,
+} from '../lib/delivery-insights'
 
 type DeliveryInsightsPanelProps = {
   report: DeliveryInsights | null
@@ -11,6 +18,8 @@ type DeliveryInsightsPanelProps = {
 }
 
 export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, error, trendsError }: DeliveryInsightsPanelProps) {
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState<'all' | 'critical' | 'warning'>('all')
+
   if (loading && !report) {
     return (
       <section className="panel delivery-panel">
@@ -44,7 +53,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   }
 
   const cards = orderedDeliveryCards(report)
-  const alerts = buildDeliveryRollupAlerts(report)
+  const alerts = filterDeliveryRollupAlerts(buildDeliveryRollupAlerts(report), alertSeverityFilter)
   const status = deliveryObservabilityState(report, error)
 
   return (
@@ -53,6 +62,17 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
         <div>
           <p className="panel-kicker">Delivery metrics</p>
           <h2>Operational signals</h2>
+        </div>
+        <div className="delivery-alert-filter-group">
+          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('all')}>
+            All
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('critical')}>
+            Critical
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('warning')}>
+            Warnings
+          </button>
         </div>
       </div>
 
