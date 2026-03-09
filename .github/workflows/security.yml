@@ -7,6 +7,7 @@ on:
       - main
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
@@ -22,6 +23,7 @@ jobs:
           scan-type: fs
           scan-ref: .
           trivy-config: trivy.yaml
+          limit-severities-for-sarif: true
           format: sarif
           output: trivy-repo.sarif
 
@@ -30,6 +32,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-repo.sarif
+          category: trivy-repo
 
   config-scan:
     runs-on: ubuntu-24.04
@@ -42,6 +45,7 @@ jobs:
           scan-type: config
           scan-ref: .
           hide-progress: true
+          limit-severities-for-sarif: true
           format: sarif
           output: trivy-config.sarif
           exit-code: "1"
@@ -52,6 +56,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-config.sarif
+          category: trivy-config
 
   image-scan:
     runs-on: ubuntu-24.04
@@ -75,8 +80,10 @@ jobs:
         with:
           image-ref: ${{ matrix.image }}
           ignore-unfixed: true
+          limit-severities-for-sarif: true
           format: sarif
           output: trivy-${{ matrix.name }}.sarif
+          exit-code: "1"
           severity: CRITICAL,HIGH
 
       - name: Upload image scan SARIF
@@ -84,3 +91,4 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-image-${{ matrix.name }}
