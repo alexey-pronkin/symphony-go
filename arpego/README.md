@@ -140,6 +140,11 @@ with recent event history and session-log references beyond the in-memory
 runtime ring. The same ClickHouse DSN is also used for delivery trend
 snapshots consumed by `GET /api/v1/insights/delivery/trends`.
 
+When `security.workspace_scan.enabled: true` is configured and a `trivy`
+binary is available, Arpego also enriches `GET /api/v1/{issue_identifier}`
+with a cached workspace security scan summary and the top high/critical
+findings from the issue workspace.
+
 ## Delivery Metrics
 
 Libretto now also consumes `GET /api/v1/insights/delivery` for a compact
