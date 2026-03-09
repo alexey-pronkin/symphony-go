@@ -94,7 +94,8 @@
 
 .delivery-card-grid,
 .delivery-breakdown-grid,
-.delivery-trend-grid {
+.delivery-trend-grid,
+.delivery-rollup-grid {
   display: grid;
   gap: 14px;
 }
@@ -105,6 +106,10 @@
 
 .delivery-trend-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.delivery-rollup-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .delivery-card {
@@ -235,6 +240,29 @@
 .delivery-source-list {
   display: grid;
   gap: 12px;
+}
+
+.delivery-alert-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.delivery-alert {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(7, 19, 26, 0.76);
+}
+
+.delivery-alert strong {
+  display: block;
+  margin: 0 0 6px;
+}
+
+.delivery-alert p {
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .delivery-source {

@@ -74,6 +74,46 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
         {metricTrendCard('Predictability', trends, trendsLoading, trendsError, (point) => point.predictability)}
       </div>
 
+      <div className="delivery-rollup-grid">
+        <article className="delivery-breakdown">
+          <h3>Trend rollups</h3>
+          <dl>
+            <div>
+              <dt>Health average</dt>
+              <dd>{trends?.rollups.health_average ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Health delta</dt>
+              <dd>{formatSigned(trends?.rollups.health_delta)}</dd>
+            </div>
+            <div>
+              <dt>Health slope</dt>
+              <dd>{formatSigned(trends?.rollups.health_slope)}</dd>
+            </div>
+            <div>
+              <dt>Warning pressure</dt>
+              <dd>{trends ? trends.rollups.warning_pressure.toFixed(2) : '—'}</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="delivery-breakdown">
+          <h3>Alerts</h3>
+          <div className="delivery-alert-list">
+            {trends?.alerts?.length ? (
+              trends.alerts.map((alert) => (
+                <div className={`delivery-alert delivery-${alert.severity}`} key={alert.key}>
+                  <strong>{alert.label}</strong>
+                  <p>{alert.detail}</p>
+                </div>
+              ))
+            ) : (
+              <p className="status-message">No trend alerts in the current window.</p>
+            )}
+          </div>
+        </article>
+      </div>
+
       {hasDeliveryWarnings(report) ? (
         <div className="delivery-warning-list">
           {report.warnings.map((warning) => (
@@ -180,6 +220,16 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
 
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`
+}
+
+function formatSigned(value: number | undefined): string {
+  if (value == null) {
+    return '—'
+  }
+  if (Number.isInteger(value)) {
+    return `${value >= 0 ? '+' : ''}${value}`
+  }
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
 }
 
 function metricTrendCard(

@@ -305,6 +305,15 @@ func TestDeliveryTrendEndpointReturnsTrendReport(t *testing.T) {
 			Window:    "7d",
 			Limit:     12,
 			Available: true,
+			Rollups: insights.DeliveryTrendRollups{
+				HealthAverage: 78,
+			},
+			Alerts: []insights.DeliveryTrendAlert{{
+				Key:      "blocked_work",
+				Label:    "Blocked work",
+				Severity: "watch",
+				Detail:   "3 blocked tasks in the latest sample.",
+			}},
 			Points: []insights.DeliveryTrendPoint{{
 				CapturedAt:     time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC),
 				DeliveryHealth: 78,
@@ -324,6 +333,10 @@ func TestDeliveryTrendEndpointReturnsTrendReport(t *testing.T) {
 	}
 	if payload["window"] != "7d" {
 		t.Fatalf("window = %#v want 7d", payload["window"])
+	}
+	rollups := payload["rollups"].(map[string]any)
+	if rollups["health_average"] != float64(78) {
+		t.Fatalf("rollups = %#v", rollups)
 	}
 	points := payload["points"].([]any)
 	if len(points) != 1 {

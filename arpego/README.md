@@ -150,6 +150,7 @@ delivery dashboard with:
 - kanban-oriented task signals: WIP, blocked ratio, aging work, flow load
 - SCM gitflow and review/CI signals grouped by configured source
 - historical trend cards from `GET /api/v1/insights/delivery/trends?window=7d&limit=12`
+- backend-derived rollups and alert summaries for trend direction, blocked work, and warning pressure
 
 SCM sources are configured under `insights.scm_sources` and can be labeled as
 `github`, `gitlab`, or `gitverse`. Sources may mix local `repo_path` inspection
@@ -195,7 +196,10 @@ Work on the selected Symphony task.
 Trend queries are intentionally bounded. Arpego currently accepts `window`
 values `24h`, `7d`, `30d`, and `90d`, plus a `limit` cap up to `48` points so
 the dashboard can stay compact even when the analytics store contains more raw
-snapshots.
+snapshots. Trend responses now also include:
+
+- rollups such as health average, latest delta, slope, and warning pressure
+- alert summaries for blocked work, failing checks, and delivery-health regression
 
 ## Dashboard Serving
 

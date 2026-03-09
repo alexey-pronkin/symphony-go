@@ -21,6 +21,8 @@ type DeliveryTrendReport struct {
 	Limit       int                  `json:"limit"`
 	Available   bool                 `json:"available"`
 	Points      []DeliveryTrendPoint `json:"points"`
+	Rollups     DeliveryTrendRollups `json:"rollups"`
+	Alerts      []DeliveryTrendAlert `json:"alerts"`
 	Warnings    []string             `json:"warnings"`
 }
 
@@ -37,6 +39,24 @@ type DeliveryTrendPoint struct {
 	OpenChangeRequests  int       `json:"open_change_requests"`
 	FailingChangeChecks int       `json:"failing_change_checks"`
 	WarningCount        int       `json:"warning_count"`
+}
+
+type DeliveryTrendRollups struct {
+	HealthAverage       int     `json:"health_average"`
+	HealthDelta         int     `json:"health_delta"`
+	HealthSlope         float64 `json:"health_slope"`
+	FlowAverage         int     `json:"flow_average"`
+	MergeAverage        int     `json:"merge_average"`
+	PredictabilityTrend int     `json:"predictability_trend"`
+	WarningPressure     float64 `json:"warning_pressure"`
+	InsufficientSamples bool    `json:"insufficient_samples"`
+}
+
+type DeliveryTrendAlert struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Severity string `json:"severity"`
+	Detail   string `json:"detail"`
 }
 
 type DeliverySummary struct {

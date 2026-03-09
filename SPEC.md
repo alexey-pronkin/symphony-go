@@ -1606,6 +1606,8 @@ Minimum endpoints:
   - Returns bounded historical delivery snapshots for compact dashboard trend rendering.
   - Implementations should accept a small window selector such as `24h`, `7d`, `30d`, or `90d`
     and a point limit.
+  - Implementations may extend the response with backend-derived rollups and alert summaries so the
+    dashboard can show trend direction without recomputing semantics in the client.
   - If historical analytics storage is unavailable, implementations should prefer returning an
     empty or partial payload with warnings over failing the whole dashboard.
   - Suggested response shape:
@@ -1616,6 +1618,24 @@ Minimum endpoints:
       "window": "7d",
       "limit": 12,
       "available": true,
+      "rollups": {
+        "health_average": 77,
+        "health_delta": -4,
+        "health_slope": -2.0,
+        "flow_average": 71,
+        "merge_average": 69,
+        "predictability_trend": -3,
+        "warning_pressure": 1.33,
+        "insufficient_samples": false
+      },
+      "alerts": [
+        {
+          "key": "blocked_work",
+          "label": "Blocked work",
+          "severity": "watch",
+          "detail": "3 blocked tasks in the latest delivery sample."
+        }
+      ],
       "points": [
         {
           "captured_at": "2026-03-07T12:00:00Z",

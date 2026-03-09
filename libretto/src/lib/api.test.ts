@@ -200,6 +200,24 @@ test('delivery trends endpoint uses expected route', async () => {
         window: '7d',
         limit: 12,
         available: true,
+        rollups: {
+          health_average: 77,
+          health_delta: 5,
+          health_slope: 2.5,
+          flow_average: 71,
+          merge_average: 69,
+          predictability_trend: 4,
+          warning_pressure: 0,
+          insufficient_samples: false,
+        },
+        alerts: [
+          {
+            key: 'blocked_work',
+            label: 'Blocked work',
+            severity: 'watch',
+            detail: '3 blocked tasks in the latest sample.',
+          },
+        ],
         points: [
           {
             captured_at: '2026-03-07T12:00:00Z',
@@ -224,6 +242,7 @@ test('delivery trends endpoint uses expected route', async () => {
   const payload = await client.fetchDeliveryTrends()
   assert.equal(requestUrl, '/api/v1/insights/delivery/trends?window=7d&limit=12')
   assert.equal(payload.points[0]?.delivery_health, 77)
+  assert.equal(payload.rollups.health_average, 77)
 })
 
 test('request surfaces structured API errors', async () => {
