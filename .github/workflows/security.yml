@@ -16,23 +16,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: aquasecurity/setup-trivy@v0.2.3
-        with:
-          version: v0.68.2
-
       - name: Trivy repo scan
         id: repo_scan
-        shell: bash
-        run: |
-          set +e
-          trivy fs \
-            --config trivy.yaml \
-            --format sarif \
-            --output trivy-repo.sarif \
-            .
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivy-config: trivy.yaml
+          format: sarif
+          output: trivy-repo.sarif
 
       - name: Upload repo scan SARIF
         if: ${{ always() && hashFiles('trivy-repo.sarif') != '' }}
@@ -42,31 +35,23 @@ jobs:
           category: trivy-repo
 
       - name: Fail repo scan on findings or scanner error
-        if: ${{ steps.repo_scan.outputs.status != '0' }}
-        run: exit "${{ steps.repo_scan.outputs.status }}"
+        if: ${{ steps.repo_scan.outcome == 'failure' }}
+        run: exit 1
 
   config-scan:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: aquasecurity/setup-trivy@v0.2.3
-        with:
-          version: v0.68.2
-
       - name: Trivy config scan
         id: config_scan
-        shell: bash
-        run: |
-          set +e
-          trivy config \
-            --quiet \
-            --severity CRITICAL,HIGH \
-            --format sarif \
-            --output trivy-config.sarif \
-            .
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-config.sarif
 
       - name: Upload config scan SARIF
         if: ${{ always() && hashFiles('trivy-config.sarif') != '' }}
@@ -76,12 +61,13 @@ jobs:
           category: trivy-config
 
       - name: Fail config scan on findings or scanner error
-        if: ${{ steps.config_scan.outputs.status != '0' }}
-        run: exit "${{ steps.config_scan.outputs.status }}"
+        if: ${{ steps.config_scan.outcome == 'failure' }}
+        run: exit 1
 
   image-scan:
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: arpego
@@ -92,27 +78,21 @@ jobs:
             image: symphony-go/libretto:ci
     steps:
       - uses: actions/checkout@v4
-      - uses: aquasecurity/setup-trivy@v0.2.3
-        with:
-          version: v0.68.2
 
       - name: Build ${{ matrix.name }} image
         run: docker build -t ${{ matrix.image }} ${{ matrix.context }}
 
       - name: Trivy image scan
         id: image_scan
-        shell: bash
-        run: |
-          set +e
-          trivy image \
-            --ignore-unfixed \
-            --severity CRITICAL,HIGH \
-            --format sarif \
-            --output trivy-${{ matrix.name }}.sarif \
-            ${{ matrix.image }}
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: image
+          image-ref: ${{ matrix.image }}
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
 
       - name: Upload image scan SARIF
         if: ${{ always() && hashFiles(format('trivy-{0}.sarif', matrix.name)) != '' }}
@@ -122,5 +102,5 @@ jobs:
           category: trivy-image-${{ matrix.name }}
 
       - name: Fail image scan on findings or scanner error
-        if: ${{ steps.image_scan.outputs.status != '0' }}
-        run: exit "${{ steps.image_scan.outputs.status }}"
+        if: ${{ steps.image_scan.outcome == 'failure' }}
+        run: exit 1
