@@ -4,6 +4,7 @@ import {
   buildDeliveryRollupAlerts,
   deliveryObservabilityState,
   filterDeliveryRollupAlerts,
+  deliverySourceKey,
   hasDeliveryWarnings,
   orderedDeliveryCards,
 } from './delivery-insights.ts'
@@ -78,6 +79,13 @@ test('filterDeliveryRollupAlerts narrows the rollup by severity', () => {
   assert.ok(warnings.length > 0)
   assert.ok(critical.every((alert) => alert.severity === 'critical'))
   assert.ok(warnings.every((alert) => alert.severity === 'warning'))
+})
+
+test('buildDeliveryRollupAlerts tags source-backed alerts with source keys', () => {
+  const report = sampleReport()
+  const alerts = buildDeliveryRollupAlerts(report)
+  const sourceAlert = alerts.find((alert) => alert.sourceKey)
+  assert.equal(sourceAlert?.sourceKey, deliverySourceKey(report.scm.sources[0]))
 })
 
 function sampleReport(): DeliveryInsights {
