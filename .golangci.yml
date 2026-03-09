@@ -13,10 +13,6 @@ linters:
     - lll
     - staticcheck
     - unused
-
-linters-settings:
-  lll:
-    line-length: 140
-
-issues:
-  exclude-use-default: false
+  settings:
+    lll:
+      line-length: 140
