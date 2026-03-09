@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildDeliveryRollupAlerts,
+  countDeliveryRollupAlerts,
   deliveryObservabilityState,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
@@ -79,6 +80,15 @@ test('filterDeliveryRollupAlerts narrows the rollup by severity', () => {
   assert.ok(warnings.length > 0)
   assert.ok(critical.every((alert) => alert.severity === 'critical'))
   assert.ok(warnings.every((alert) => alert.severity === 'warning'))
+})
+
+test('countDeliveryRollupAlerts summarizes the available severity buckets', () => {
+  const alerts = buildDeliveryRollupAlerts(sampleReport())
+  assert.deepEqual(countDeliveryRollupAlerts(alerts), {
+    all: alerts.length,
+    critical: alerts.filter((alert) => alert.severity === 'critical').length,
+    warning: alerts.filter((alert) => alert.severity === 'warning').length,
+  })
 })
 
 test('buildDeliveryRollupAlerts tags source-backed alerts with source keys', () => {

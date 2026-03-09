@@ -7,6 +7,12 @@ export type DeliveryRollupAlert = {
   sourceKey?: string
 }
 
+export type DeliveryAlertFilterCounts = {
+  all: number
+  critical: number
+  warning: number
+}
+
 export function filterDeliveryRollupAlerts(
   alerts: DeliveryRollupAlert[],
   severity: 'all' | DeliveryRollupAlert['severity']
@@ -15,6 +21,17 @@ export function filterDeliveryRollupAlerts(
     return alerts
   }
   return alerts.filter((alert) => alert.severity === severity)
+}
+
+export function countDeliveryRollupAlerts(alerts: DeliveryRollupAlert[]): DeliveryAlertFilterCounts {
+  return alerts.reduce<DeliveryAlertFilterCounts>(
+    (counts, alert) => {
+      counts.all += 1
+      counts[alert.severity] += 1
+      return counts
+    },
+    { all: 0, critical: 0, warning: 0 }
+  )
 }
 
 export function orderedDeliveryCards(report: DeliveryInsights): DeliveryMetricCard[] {

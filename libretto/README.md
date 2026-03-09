@@ -32,6 +32,7 @@ Libretto now provides a Symphony operator dashboard for:
 - manual refresh via `POST /api/v1/refresh`
 - delivery insights with a compact alert rollup for high-priority risks
 - severity filters for the delivery alert rollup
+- filter counts and explicit empty states for the delivery alert rollup
 - source-backed delivery alerts can now focus the related SCM source card directly
 
 ## API Configuration

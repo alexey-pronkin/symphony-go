@@ -98,6 +98,11 @@
   flex-wrap: wrap;
 }
 
+.delivery-alert-filter-active {
+  background: linear-gradient(135deg, rgba(96, 211, 255, 0.24), rgba(255, 159, 122, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(96, 211, 255, 0.28);
+}
+
 .delivery-card-grid,
 .delivery-alert-list,
 .delivery-breakdown-grid,
@@ -108,6 +113,14 @@
 
 .delivery-alert-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.delivery-alert-empty {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px dashed rgba(96, 211, 255, 0.26);
+  color: var(--text-muted);
+  background: rgba(7, 19, 26, 0.52);
 }
 
 .delivery-alert {
