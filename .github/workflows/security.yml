@@ -16,51 +16,73 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
       - name: Trivy repo scan
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: fs
-          scan-ref: .
-          trivy-config: trivy.yaml
-          limit-severities-for-sarif: true
-          format: sarif
-          output: trivy-repo.sarif
+        id: repo_scan
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v "${PWD}:/work" \
+            -w /work \
+            aquasec/trivy:0.65.0 \
+            fs \
+            --config trivy.yaml \
+            --format sarif \
+            --output trivy-repo.sarif \
+            .
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload repo scan SARIF
-        if: always()
+        if: ${{ always() && hashFiles('trivy-repo.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-repo.sarif
           category: trivy-repo
 
+      - name: Fail repo scan on findings or scanner error
+        if: ${{ steps.repo_scan.outputs.status != '0' }}
+        run: exit "${{ steps.repo_scan.outputs.status }}"
+
   config-scan:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
       - name: Trivy config scan
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: config
-          scan-ref: .
-          hide-progress: true
-          limit-severities-for-sarif: true
-          format: sarif
-          output: trivy-config.sarif
-          exit-code: "1"
-          severity: CRITICAL,HIGH
+        id: config_scan
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v "${PWD}:/work" \
+            -w /work \
+            aquasec/trivy:0.65.0 \
+            config \
+            --quiet \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --output trivy-config.sarif \
+            .
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload config scan SARIF
-        if: always()
+        if: ${{ always() && hashFiles('trivy-config.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
 
+      - name: Fail config scan on findings or scanner error
+        if: ${{ steps.config_scan.outputs.status != '0' }}
+        run: exit "${{ steps.config_scan.outputs.status }}"
+
   image-scan:
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: arpego
@@ -76,19 +98,32 @@ jobs:
         run: docker build -t ${{ matrix.image }} ${{ matrix.context }}
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          image-ref: ${{ matrix.image }}
-          ignore-unfixed: true
-          limit-severities-for-sarif: true
-          format: sarif
-          output: trivy-${{ matrix.name }}.sarif
-          exit-code: "1"
-          severity: CRITICAL,HIGH
+        id: image_scan
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}:/work" \
+            -w /work \
+            aquasec/trivy:0.65.0 \
+            image \
+            --ignore-unfixed \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --output trivy-${{ matrix.name }}.sarif \
+            ${{ matrix.image }}
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload image scan SARIF
-        if: always()
+        if: ${{ always() && hashFiles(format('trivy-{0}.sarif', matrix.name)) != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.name }}.sarif
           category: trivy-image-${{ matrix.name }}
+
+      - name: Fail image scan on findings or scanner error
+        if: ${{ steps.image_scan.outputs.status != '0' }}
+        run: exit "${{ steps.image_scan.outputs.status }}"

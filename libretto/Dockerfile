@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine3.23 AS build
 
 WORKDIR /app
 
@@ -8,9 +8,14 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29.5-alpine3.23
+
+USER root
+RUN apk upgrade --no-cache --available
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 8080
+
+USER 101
