@@ -54,6 +54,7 @@ type IssueDetail struct {
 	IssueID         string         `json:"issue_id"`
 	Status          string         `json:"status"`
 	Workspace       WorkspaceInfo  `json:"workspace"`
+	WorkspaceScan   *WorkspaceScan `json:"workspace_scan,omitempty"`
 	Attempts        AttemptInfo    `json:"attempts"`
 	Running         *RunningStatus `json:"running"`
 	Retry           *RetryStatus   `json:"retry"`
@@ -65,6 +66,36 @@ type IssueDetail struct {
 
 type WorkspaceInfo struct {
 	Path string `json:"path"`
+}
+
+type WorkspaceScan struct {
+	Status     string                 `json:"status"`
+	ScannedAt  *time.Time             `json:"scanned_at,omitempty"`
+	DurationMs int64                  `json:"duration_ms"`
+	Summary    WorkspaceScanSummary   `json:"summary"`
+	Findings   []WorkspaceScanFinding `json:"findings"`
+	Error      *string                `json:"error,omitempty"`
+}
+
+type WorkspaceScanSummary struct {
+	Total           int `json:"total"`
+	Critical        int `json:"critical"`
+	High            int `json:"high"`
+	Vulnerabilities int `json:"vulnerabilities"`
+	Misconfigs      int `json:"misconfigurations"`
+	Secrets         int `json:"secrets"`
+}
+
+type WorkspaceScanFinding struct {
+	ID               string  `json:"id"`
+	Category         string  `json:"category"`
+	Severity         string  `json:"severity"`
+	Title            string  `json:"title"`
+	Target           string  `json:"target"`
+	PrimaryURL       *string `json:"primary_url,omitempty"`
+	PackageName      string  `json:"package_name,omitempty"`
+	InstalledVersion string  `json:"installed_version,omitempty"`
+	FixedVersion     string  `json:"fixed_version,omitempty"`
 }
 
 type AttemptInfo struct {

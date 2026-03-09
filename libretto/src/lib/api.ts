@@ -47,6 +47,31 @@ export type IssueDetail = {
   workspace: {
     path: string
   }
+  workspace_scan?: {
+    status: string
+    scanned_at?: string | null
+    duration_ms: number
+    summary: {
+      total: number
+      critical: number
+      high: number
+      vulnerabilities: number
+      misconfigurations: number
+      secrets: number
+    }
+    findings: Array<{
+      id: string
+      category: string
+      severity: string
+      title: string
+      target: string
+      primary_url?: string | null
+      package_name?: string
+      installed_version?: string
+      fixed_version?: string
+    }>
+    error?: string | null
+  } | null
   attempts: {
     restart_count: number
     current_retry_attempt: number

@@ -465,6 +465,31 @@ function App() {
                       </div>
                     ) : null}
 
+                    {detail.workspace_scan ? (
+                      <div className="token-block">
+                        <h4>Workspace scan</h4>
+                        <p>
+                          {detail.workspace_scan.status} · {detail.workspace_scan.summary.total} findings ·{' '}
+                          {detail.workspace_scan.summary.critical} critical / {detail.workspace_scan.summary.high} high
+                        </p>
+                        {detail.workspace_scan.error ? <p>{detail.workspace_scan.error}</p> : null}
+                        {detail.workspace_scan.findings.length > 0 ? (
+                          <div className="event-list">
+                            {detail.workspace_scan.findings.map((finding) => (
+                              <article key={`${finding.category}-${finding.id}-${finding.target}`} className="event-row">
+                                <strong>
+                                  {finding.severity} · {finding.id}
+                                </strong>
+                                <span>{finding.category}</span>
+                                <p>{finding.title}</p>
+                                <p>{finding.target}</p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     {detail.recent_events.length > 0 ? (
                       <div className="event-block">
                         <h4>Recent events</h4>

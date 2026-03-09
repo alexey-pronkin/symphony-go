@@ -1518,6 +1518,33 @@ Minimum endpoints:
       "workspace": {
         "path": "/tmp/symphony_workspaces/MT-649"
       },
+      "workspace_scan": {
+        "status": "findings",
+        "scanned_at": "2026-02-24T20:15:08Z",
+        "duration_ms": 1432,
+        "summary": {
+          "total": 2,
+          "critical": 1,
+          "high": 1,
+          "vulnerabilities": 1,
+          "misconfigurations": 1,
+          "secrets": 0
+        },
+        "findings": [
+          {
+            "id": "CVE-2026-10000",
+            "category": "vulnerability",
+            "severity": "critical",
+            "title": "Example vulnerability",
+            "target": "workspace/go.mod",
+            "primary_url": "https://example.invalid/CVE-2026-10000",
+            "package_name": "example/pkg",
+            "installed_version": "1.0.0",
+            "fixed_version": "1.0.1"
+          }
+        ],
+        "error": null
+      },
       "attempts": {
         "restart_count": 1,
         "current_retry_attempt": 2
@@ -1557,6 +1584,9 @@ Minimum endpoints:
       "tracked": {}
     }
     ```
+
+  - Implementations may populate `workspace_scan` from an on-demand or cached workspace security
+    scan and should degrade gracefully when the scanner is unavailable.
 
 - `GET /api/v1/insights/delivery` (optional delivery-metrics extension)
   - Returns a compact delivery-metrics payload combining tracker/task-flow signals with SCM gitflow

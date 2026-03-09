@@ -192,6 +192,40 @@ func (c Config) StorageClickHouseDSN() string {
 	return resolveVar(raw)
 }
 
+// --- security (extension) ---
+
+func (c Config) SecurityWorkspaceScanEnabled() bool {
+	raw, ok := c.section("security")["workspace_scan"]
+	if !ok {
+		return false
+	}
+	section, _ := raw.(map[string]any)
+	if section == nil {
+		return false
+	}
+	return getBool(section, "enabled", false)
+}
+
+func (c Config) SecurityWorkspaceScanCommand() string {
+	return strings.TrimSpace(getString(nestedSection(c.section("security"), "workspace_scan"), "command", "trivy"))
+}
+
+func (c Config) SecurityWorkspaceScanTimeoutMs() int64 {
+	timeout := getInt64(nestedSection(c.section("security"), "workspace_scan"), "timeout_ms", 30_000)
+	if timeout <= 0 {
+		return 30_000
+	}
+	return timeout
+}
+
+func (c Config) SecurityWorkspaceScanTTLSeconds() int64 {
+	ttl := getInt64(nestedSection(c.section("security"), "workspace_scan"), "ttl_seconds", 60)
+	if ttl <= 0 {
+		return 60
+	}
+	return ttl
+}
+
 // --- insights (extension) ---
 
 func (c Config) InsightsSCMSources() []SCMSource {
@@ -271,6 +305,23 @@ func getInt64(m map[string]any, key string, def int64) int64 {
 	return toInt64(v, def)
 }
 
+func getBool(m map[string]any, key string, def bool) bool {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return def
+	}
+	switch b := v.(type) {
+	case bool:
+		return b
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(b))
+		if err == nil {
+			return parsed
+		}
+	}
+	return def
+}
+
 func toInt64(v any, def int64) int64 {
 	switch n := v.(type) {
 	case int:
@@ -314,6 +365,14 @@ func getStringList(m map[string]any, key string, def []string) []string {
 		return out
 	}
 	return def
+}
+
+func nestedSection(m map[string]any, key string) map[string]any {
+	child, _ := m[key].(map[string]any)
+	if child == nil {
+		return map[string]any{}
+	}
+	return child
 }
 
 // resolveVar expands $VAR_NAME env references. Returns empty string if the
