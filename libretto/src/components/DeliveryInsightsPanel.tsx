@@ -3,6 +3,7 @@ import type { DeliveryInsights, DeliveryTrendReport } from '../lib/api'
 import {
   buildDeliveryRollupAlerts,
   deliveryObservabilityState,
+  filterDeliveryRollupAlerts,
   deliverySourceKey,
   hasDeliveryWarnings,
   orderedDeliveryCards,
@@ -18,6 +19,7 @@ type DeliveryInsightsPanelProps = {
 }
 
 export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, error, trendsError }: DeliveryInsightsPanelProps) {
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState<'all' | 'critical' | 'warning'>('all')
   const [focusedSourceKey, setFocusedSourceKey] = useState<string | null>(null)
 
   if (loading && !report) {
@@ -53,7 +55,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   }
 
   const cards = orderedDeliveryCards(report)
-  const alerts = buildDeliveryRollupAlerts(report)
+  const alerts = filterDeliveryRollupAlerts(buildDeliveryRollupAlerts(report), alertSeverityFilter)
   const status = deliveryObservabilityState(report, error)
   const resolvedFocusedSourceKey =
     focusedSourceKey && report.scm.sources.some((source) => deliverySourceKey(source) === focusedSourceKey) ? focusedSourceKey : null
@@ -64,6 +66,17 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
         <div>
           <p className="panel-kicker">Delivery metrics</p>
           <h2>Operational signals</h2>
+        </div>
+        <div className="delivery-alert-filter-group">
+          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('all')}>
+            All
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('critical')}>
+            Critical
+          </button>
+          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('warning')}>
+            Warnings
+          </button>
         </div>
       </div>
 

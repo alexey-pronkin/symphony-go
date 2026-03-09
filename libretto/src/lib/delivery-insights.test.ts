@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildDeliveryRollupAlerts,
   deliveryObservabilityState,
+  filterDeliveryRollupAlerts,
   deliverySourceKey,
   hasDeliveryWarnings,
   orderedDeliveryCards,
@@ -68,6 +69,16 @@ test('buildDeliveryRollupAlerts deduplicates repeated warning messages', () => {
   const sourceWarnings = alerts.filter((alert) => alert.detail === 'provider timeout')
   assert.equal(duplicateWarnings.length, 1)
   assert.equal(sourceWarnings.length, 1)
+})
+
+test('filterDeliveryRollupAlerts narrows the rollup by severity', () => {
+  const alerts = buildDeliveryRollupAlerts(sampleReport())
+  const critical = filterDeliveryRollupAlerts(alerts, 'critical')
+  const warnings = filterDeliveryRollupAlerts(alerts, 'warning')
+  assert.ok(critical.length > 0)
+  assert.ok(warnings.length > 0)
+  assert.ok(critical.every((alert) => alert.severity === 'critical'))
+  assert.ok(warnings.every((alert) => alert.severity === 'warning'))
 })
 
 test('buildDeliveryRollupAlerts tags source-backed alerts with source keys', () => {
