@@ -232,6 +232,22 @@ export type DeliveryTrendReport = {
   limit: number
   available: boolean
   points: DeliveryTrendPoint[]
+  rollups: {
+    health_average: number
+    health_delta: number
+    health_slope: number
+    flow_average: number
+    merge_average: number
+    predictability_trend: number
+    warning_pressure: number
+    insufficient_samples: boolean
+  }
+  alerts: Array<{
+    key: string
+    label: string
+    severity: string
+    detail: string
+  }>
   warnings: string[]
 }
 

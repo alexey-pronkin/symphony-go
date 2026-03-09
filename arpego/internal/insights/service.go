@@ -123,6 +123,7 @@ func (s *Service) Trends(ctx context.Context, query DeliveryTrendQuery) (Deliver
 		Limit:       resolved.Limit,
 		Available:   s.trends != nil,
 		Points:      []DeliveryTrendPoint{},
+		Alerts:      []DeliveryTrendAlert{},
 		Warnings:    []string{},
 	}
 	if s.trends == nil {
@@ -136,6 +137,8 @@ func (s *Service) Trends(ctx context.Context, query DeliveryTrendQuery) (Deliver
 		return report, nil
 	}
 	report.Points = points
+	report.Rollups = buildTrendRollups(points)
+	report.Alerts = buildTrendAlerts(points, report.Rollups)
 	return report, nil
 }
 
@@ -463,6 +466,104 @@ func snapshotFromReport(report DeliveryReport) DeliveryTrendPoint {
 		FailingChangeChecks: report.SCM.Totals.FailingChangeRequests,
 		WarningCount:        len(report.Warnings),
 	}
+}
+
+func buildTrendRollups(points []DeliveryTrendPoint) DeliveryTrendRollups {
+	if len(points) == 0 {
+		return DeliveryTrendRollups{InsufficientSamples: true}
+	}
+	rollups := DeliveryTrendRollups{
+		InsufficientSamples: len(points) < 2,
+	}
+	var healthSum int
+	var flowSum int
+	var mergeSum int
+	var warningSum int
+	for _, point := range points {
+		healthSum += point.DeliveryHealth
+		flowSum += point.FlowEfficiency
+		mergeSum += point.MergeReadiness
+		warningSum += point.WarningCount
+	}
+	first := points[0]
+	last := points[len(points)-1]
+	rollups.HealthAverage = int(math.Round(float64(healthSum) / float64(len(points))))
+	rollups.HealthDelta = last.DeliveryHealth - first.DeliveryHealth
+	rollups.FlowAverage = int(math.Round(float64(flowSum) / float64(len(points))))
+	rollups.MergeAverage = int(math.Round(float64(mergeSum) / float64(len(points))))
+	rollups.PredictabilityTrend = last.Predictability - first.Predictability
+	rollups.WarningPressure = round2(float64(warningSum) / float64(len(points)))
+	if len(points) >= 2 {
+		rollups.HealthSlope = round2(float64(last.DeliveryHealth-first.DeliveryHealth) / float64(len(points)-1))
+	}
+	return rollups
+}
+
+func buildTrendAlerts(points []DeliveryTrendPoint, rollups DeliveryTrendRollups) []DeliveryTrendAlert {
+	if len(points) == 0 {
+		return []DeliveryTrendAlert{{
+			Key:      "trend_unavailable",
+			Label:    "Trend coverage",
+			Severity: "watch",
+			Detail:   "No historical samples captured yet for alert evaluation.",
+		}}
+	}
+	last := points[len(points)-1]
+	alerts := []DeliveryTrendAlert{}
+	if last.BlockedTasks >= 3 {
+		alerts = append(alerts, DeliveryTrendAlert{
+			Key:      "blocked_work",
+			Label:    "Blocked work",
+			Severity: severityFromCount(last.BlockedTasks, 5),
+			Detail:   fmt.Sprintf("%d blocked tasks in the latest delivery sample.", last.BlockedTasks),
+		})
+	}
+	if last.FailingChangeChecks > 0 {
+		alerts = append(alerts, DeliveryTrendAlert{
+			Key:      "failing_checks",
+			Label:    "Failing checks",
+			Severity: severityFromCount(last.FailingChangeChecks, 3),
+			Detail:   fmt.Sprintf("%d failing change checks in the latest sample.", last.FailingChangeChecks),
+		})
+	}
+	if rollups.HealthDelta <= -8 || last.DeliveryHealth < 60 {
+		alerts = append(alerts, DeliveryTrendAlert{
+			Key:      "health_regression",
+			Label:    "Delivery regression",
+			Severity: severityFromDelta(rollups.HealthDelta, last.DeliveryHealth),
+			Detail:   fmt.Sprintf("Delivery health moved %d points to %d.", rollups.HealthDelta, last.DeliveryHealth),
+		})
+	}
+	if rollups.WarningPressure >= 1.5 {
+		alerts = append(alerts, DeliveryTrendAlert{
+			Key:      "warning_pressure",
+			Label:    "Warning pressure",
+			Severity: severityFromWarningPressure(rollups.WarningPressure),
+			Detail:   fmt.Sprintf("Average warning pressure is %.2f warnings per sample.", rollups.WarningPressure),
+		})
+	}
+	return alerts
+}
+
+func severityFromCount(count int, criticalAt int) string {
+	if count >= criticalAt {
+		return "risk"
+	}
+	return "watch"
+}
+
+func severityFromDelta(delta int, score int) string {
+	if delta <= -15 || score < 50 {
+		return "risk"
+	}
+	return "watch"
+}
+
+func severityFromWarningPressure(value float64) string {
+	if value >= 2.5 {
+		return "risk"
+	}
+	return "watch"
 }
 
 func clamp01(value float64) float64 {
