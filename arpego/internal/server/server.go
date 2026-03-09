@@ -18,6 +18,7 @@ func New(
 	tasks TaskPlatform,
 	delivery DeliveryInsights,
 	observability Observability,
+	workspaceScanner WorkspaceSecurityScanner,
 	port int,
 	dashboardDir string,
 ) *Server {
@@ -25,7 +26,7 @@ func New(
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              addr,
-			Handler:           NewHandler(runtime, tasks, delivery, observability, dashboardDir),
+			Handler:           NewHandler(runtime, tasks, delivery, observability, workspaceScanner, dashboardDir),
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
