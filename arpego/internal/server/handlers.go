@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,9 +32,20 @@ type TaskPlatform interface {
 
 type DeliveryInsights interface {
 	Delivery(context.Context) (insights.DeliveryReport, error)
+	Trends(context.Context, insights.DeliveryTrendQuery) (insights.DeliveryTrendReport, error)
 }
 
-func NewHandler(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, dashboardDir string) http.Handler {
+type Observability interface {
+	ListRuntimeEvents(context.Context, tracker.RuntimeEventQuery) ([]tracker.RuntimeEvent, error)
+}
+
+func NewHandler(
+	runtime Runtime,
+	tasks TaskPlatform,
+	delivery DeliveryInsights,
+	observability Observability,
+	dashboardDir string,
+) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/metrics" {
@@ -45,7 +57,7 @@ func NewHandler(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, 
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-			handleAPI(runtime, tasks, delivery, w, r)
+			handleAPI(runtime, tasks, delivery, observability, w, r)
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -91,7 +103,14 @@ func tryServeDashboard(w http.ResponseWriter, r *http.Request, dashboardDir stri
 	return true
 }
 
-func handleAPI(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, w http.ResponseWriter, r *http.Request) {
+func handleAPI(
+	runtime Runtime,
+	tasks TaskPlatform,
+	delivery DeliveryInsights,
+	observability Observability,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	switch {
 	case r.URL.Path == "/api/v1/tasks":
 		handleTasks(tasks, w, r)
@@ -103,6 +122,12 @@ func handleAPI(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, w
 			return
 		}
 		handleDeliveryInsights(delivery, w, r)
+	case r.URL.Path == "/api/v1/insights/delivery/trends":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		handleDeliveryTrends(delivery, w, r)
 	case r.URL.Path == "/api/v1/state":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -141,6 +166,9 @@ func handleAPI(runtime Runtime, tasks TaskPlatform, delivery DeliveryInsights, w
 			})
 			return
 		}
+		if observability != nil {
+			detail = enrichIssueDetail(r.Context(), observability, detail)
+		}
 		writeJSON(w, http.StatusOK, detail)
 	default:
 		http.NotFound(w, r)
@@ -162,6 +190,39 @@ func handleDeliveryInsights(delivery DeliveryInsights, w http.ResponseWriter, r 
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": map[string]any{
 				"code":    "delivery_insights_failed",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func handleDeliveryTrends(delivery DeliveryInsights, w http.ResponseWriter, r *http.Request) {
+	if delivery == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": map[string]any{
+				"code":    "delivery_trends_unavailable",
+				"message": "delivery insights service is unavailable",
+			},
+		})
+		return
+	}
+	query := insights.DeliveryTrendQuery{
+		Window: strings.TrimSpace(r.URL.Query().Get("window")),
+		Limit:  parsePositiveInt(r.URL.Query().Get("limit")),
+	}
+	report, err := delivery.Trends(r.Context(), query)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := "delivery_trends_failed"
+		if errors.Is(err, insights.ErrInvalidTrendWindow) {
+			status = http.StatusBadRequest
+			code = "invalid_delivery_trend_window"
+		}
+		writeJSON(w, status, map[string]any{
+			"error": map[string]any{
+				"code":    code,
 				"message": err.Error(),
 			},
 		})
@@ -329,6 +390,91 @@ func hasExtension(path string) bool {
 
 func normalizeStateKey(state string) string {
 	return strings.ToLower(strings.TrimSpace(state))
+}
+
+func parsePositiveInt(value string) int {
+	if strings.TrimSpace(value) == "" {
+		return 0
+	}
+	var out int
+	if _, err := fmt.Sscanf(value, "%d", &out); err != nil || out <= 0 {
+		return 0
+	}
+	return out
+}
+
+func enrichIssueDetail(
+	ctx context.Context,
+	observability Observability,
+	detail orchestrator.IssueDetail,
+) orchestrator.IssueDetail {
+	events, err := observability.ListRuntimeEvents(ctx, tracker.RuntimeEventQuery{
+		IssueID:    detail.IssueID,
+		Identifier: detail.IssueIdentifier,
+		Limit:      20,
+	})
+	if err != nil || len(events) == 0 {
+		return detail
+	}
+
+	combined := make([]orchestrator.IssueEvent, 0, len(detail.RecentEvents)+len(events))
+	seenEvents := map[string]struct{}{}
+	for _, event := range detail.RecentEvents {
+		key := fmt.Sprintf("%s|%s|%s", event.At.UTC().Format(time.RFC3339Nano), event.Event, event.Message)
+		if _, ok := seenEvents[key]; ok {
+			continue
+		}
+		seenEvents[key] = struct{}{}
+		combined = append(combined, event)
+	}
+	for _, event := range events {
+		mapped := orchestrator.IssueEvent{
+			At:      event.ObservedAt,
+			Event:   event.Name,
+			Message: event.Message,
+		}
+		key := fmt.Sprintf("%s|%s|%s", mapped.At.UTC().Format(time.RFC3339Nano), mapped.Event, mapped.Message)
+		if _, ok := seenEvents[key]; ok {
+			continue
+		}
+		seenEvents[key] = struct{}{}
+		combined = append(combined, mapped)
+	}
+	slices.SortFunc(combined, func(a, b orchestrator.IssueEvent) int {
+		return a.At.Compare(b.At)
+	})
+	if len(combined) > 20 {
+		combined = append([]orchestrator.IssueEvent(nil), combined[len(combined)-20:]...)
+	}
+	detail.RecentEvents = combined
+
+	logs := append([]orchestrator.IssueLogRef(nil), detail.Logs.CodexSessionLogs...)
+	seenLogs := map[string]struct{}{}
+	for _, log := range logs {
+		if log.Path == "" {
+			continue
+		}
+		seenLogs[log.Path] = struct{}{}
+	}
+	for _, event := range events {
+		if strings.TrimSpace(event.LogPath) == "" {
+			continue
+		}
+		if _, ok := seenLogs[event.LogPath]; ok {
+			continue
+		}
+		seenLogs[event.LogPath] = struct{}{}
+		label := "session"
+		if strings.TrimSpace(event.SessionID) != "" {
+			label = event.SessionID
+		}
+		logs = append(logs, orchestrator.IssueLogRef{
+			Label: label,
+			Path:  event.LogPath,
+		})
+	}
+	detail.Logs = orchestrator.IssueLogs{CodexSessionLogs: logs}
+	return detail
 }
 
 func writeMetrics(runtime Runtime, tasks TaskPlatform, w http.ResponseWriter) {

@@ -182,22 +182,56 @@ export type DeliveryInsights = {
       drift_commits: number
       ahead_commits: number
       max_age_hours: number
+      open_change_requests: number
+      approved_change_requests: number
+      failing_change_requests: number
+      stale_change_requests: number
     }
     sources: Array<{
       kind: string
       name: string
       repo_path: string
       main_branch: string
+      repository?: string
+      project_id?: string
       branches: number
       unmerged_branches: number
       stale_branches: number
       drift_commits: number
       ahead_commits: number
       max_age_hours: number
+      open_change_requests: number
+      approved_change_requests: number
+      failing_change_requests: number
+      stale_change_requests: number
       merge_readiness: number
       warnings?: string[]
     }>
   }
+  warnings: string[]
+}
+
+export type DeliveryTrendPoint = {
+  captured_at: string
+  delivery_health: number
+  flow_efficiency: number
+  merge_readiness: number
+  predictability: number
+  active_tasks: number
+  blocked_tasks: number
+  done_last_window: number
+  wip_count: number
+  open_change_requests: number
+  failing_change_checks: number
+  warning_count: number
+}
+
+export type DeliveryTrendReport = {
+  generated_at: string
+  window: string
+  limit: number
+  available: boolean
+  points: DeliveryTrendPoint[]
   warnings: string[]
 }
 
@@ -236,6 +270,10 @@ export function createSymphonyClient(options?: { baseUrl?: string; fetcher?: Fet
     },
     fetchDeliveryInsights(): Promise<DeliveryInsights> {
       return request<DeliveryInsights>(fetcher, `${baseUrl}/api/v1/insights/delivery`)
+    },
+    fetchDeliveryTrends(window = '7d', limit = 12): Promise<DeliveryTrendReport> {
+      const params = new URLSearchParams({ window, limit: String(limit) })
+      return request<DeliveryTrendReport>(fetcher, `${baseUrl}/api/v1/insights/delivery/trends?${params.toString()}`)
     },
     createTask(input: CreateTaskInput): Promise<TaskRecord> {
       return request<TaskRecord>(fetcher, `${baseUrl}/api/v1/tasks`, {

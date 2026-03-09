@@ -53,6 +53,7 @@ When enabled through `server.port` or `--port`, the server binds to loopback and
 - `GET /api/v1/state`
 - `GET /api/v1/{issue_identifier}`
 - `GET /api/v1/insights/delivery`
+- `GET /api/v1/insights/delivery/trends`
 - `GET /api/v1/tasks`
 - `POST /api/v1/tasks`
 - `PATCH /api/v1/tasks/{issue_identifier}`
@@ -72,6 +73,7 @@ Arpego now supports a built-in local task platform with:
 - optional `tracker.storage: file|postgres` selector
 - optional `tracker.file` task-store path
 - optional `storage.postgres_dsn` or `SYMPHONY_POSTGRES_DSN` for Postgres-backed local storage
+- optional `storage.clickhouse_dsn` or `SYMPHONY_CLICKHOUSE_DSN` for persisted runtime-event history
 - task CRUD APIs under `/api/v1/tasks`
 - a Libretto UI that can create and move tasks while still showing runtime state
 
@@ -132,6 +134,12 @@ Prometheus scrapes `GET /metrics` from Arpego. The compose workflow under
 uses the local task platform so the stack can boot without external tracker
 credentials.
 
+When `storage.clickhouse_dsn` is configured, Arpego also persists runtime
+events to ClickHouse and uses them to enrich `GET /api/v1/{issue_identifier}`
+with recent event history and session-log references beyond the in-memory
+runtime ring. The same ClickHouse DSN is also used for delivery trend
+snapshots consumed by `GET /api/v1/insights/delivery/trends`.
+
 ## Delivery Metrics
 
 Libretto now also consumes `GET /api/v1/insights/delivery` for a compact
@@ -140,12 +148,16 @@ delivery dashboard with:
 - integral metrics: delivery health, flow efficiency, merge readiness, predictability
 - agile-oriented task signals: throughput, completion ratio, review load
 - kanban-oriented task signals: WIP, blocked ratio, aging work, flow load
-- SCM gitflow signals grouped by configured source
+- SCM gitflow and review/CI signals grouped by configured source
+- historical trend cards from `GET /api/v1/insights/delivery/trends?window=7d&limit=12`
 
 SCM sources are configured under `insights.scm_sources` and can be labeled as
-`github`, `gitlab`, or `gitverse`. The current implementation inspects local git
-repositories through `go-git`, so the same collection path works for hosted and
-self-hosted remotes.
+`github`, `gitlab`, or `gitverse`. Sources may mix local `repo_path` inspection
+with provider metadata such as `api_url`, `repository`, `project_id`, and
+`api_token`. GitHub and GitLab sources now augment local branch metrics with
+open-change, approval, stale-review, and failing-check signals. GitVerse
+currently degrades gracefully with explicit source warnings when provider
+metrics are unavailable.
 
 Example:
 
@@ -165,15 +177,25 @@ insights:
       name: symphony-core
       repo_path: ~/src/symphony-go
       main_branch: main
+      repository: alexey-pronkin/symphony-go
+      api_token: $GITHUB_TOKEN
     - kind: gitlab
       name: internal-platform
       repo_path: ~/src/internal-platform
       main_branch: master
+      api_url: https://gitlab.example.com/api/v4
+      project_id: group%2Finternal-platform
+      api_token: $GITLAB_TOKEN
 server:
   port: 18080
 ---
 Work on the selected Symphony task.
 ```
+
+Trend queries are intentionally bounded. Arpego currently accepts `window`
+values `24h`, `7d`, `30d`, and `90d`, plus a `limit` cap up to `48` points so
+the dashboard can stay compact even when the analytics store contains more raw
+snapshots.
 
 ## Dashboard Serving
 

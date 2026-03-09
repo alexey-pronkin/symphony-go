@@ -7,3 +7,13 @@ export function orderedDeliveryCards(report: DeliveryInsights): DeliveryMetricCa
 export function hasDeliveryWarnings(report: DeliveryInsights | null): boolean {
   return Boolean(report && report.warnings.length > 0)
 }
+
+export function deliveryObservabilityState(report: DeliveryInsights | null, error: string | null): 'healthy' | 'degraded' | 'unavailable' {
+  if (error && !report) {
+    return 'unavailable'
+  }
+  if (hasDeliveryWarnings(report)) {
+    return 'degraded'
+  }
+  return 'healthy'
+}

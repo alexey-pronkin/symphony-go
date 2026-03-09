@@ -173,6 +173,10 @@ test('delivery insights endpoint uses expected route', async () => {
             drift_commits: 0,
             ahead_commits: 0,
             max_age_hours: 0,
+            open_change_requests: 0,
+            approved_change_requests: 0,
+            failing_change_requests: 0,
+            stale_change_requests: 0,
           },
           sources: [],
         },
@@ -184,6 +188,42 @@ test('delivery insights endpoint uses expected route', async () => {
   const payload = await client.fetchDeliveryInsights()
   assert.equal(requestUrl, '/api/v1/insights/delivery')
   assert.equal(payload.summary.delivery_health.score, 80)
+})
+
+test('delivery trends endpoint uses expected route', async () => {
+  let requestUrl = ''
+  const client = createSymphonyClient({
+    fetcher: async (input) => {
+      requestUrl = String(input)
+      return jsonResponse({
+        generated_at: '2026-03-08T12:00:00Z',
+        window: '7d',
+        limit: 12,
+        available: true,
+        points: [
+          {
+            captured_at: '2026-03-07T12:00:00Z',
+            delivery_health: 77,
+            flow_efficiency: 71,
+            merge_readiness: 69,
+            predictability: 73,
+            active_tasks: 5,
+            blocked_tasks: 1,
+            done_last_window: 4,
+            wip_count: 3,
+            open_change_requests: 2,
+            failing_change_checks: 0,
+            warning_count: 0,
+          },
+        ],
+        warnings: [],
+      })
+    },
+  })
+
+  const payload = await client.fetchDeliveryTrends()
+  assert.equal(requestUrl, '/api/v1/insights/delivery/trends?window=7d&limit=12')
+  assert.equal(payload.points[0]?.delivery_health, 77)
 })
 
 test('request surfaces structured API errors', async () => {

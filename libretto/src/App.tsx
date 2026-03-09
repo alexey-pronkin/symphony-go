@@ -5,12 +5,14 @@ import {
   createSymphonyClient,
   type CreateTaskInput,
   type DeliveryInsights,
+  type DeliveryTrendReport,
   type IssueDetail,
   type RuntimeIssue,
   type RuntimeState,
   type TaskListResponse,
   type TaskRecord,
 } from './lib/api'
+import { appendCreatedTask, applyTaskUpdate, selectPreferredIssue } from './lib/task-board'
 
 const client = createSymphonyClient()
 const POLL_INTERVAL_MS = 15000
@@ -20,12 +22,15 @@ function App() {
   const [state, setState] = useState<RuntimeState | null>(null)
   const [tasks, setTasks] = useState<TaskListResponse | null>(null)
   const [delivery, setDelivery] = useState<DeliveryInsights | null>(null)
+  const [deliveryTrends, setDeliveryTrends] = useState<DeliveryTrendReport | null>(null)
   const [stateError, setStateError] = useState<string | null>(null)
   const [tasksError, setTasksError] = useState<string | null>(null)
   const [deliveryError, setDeliveryError] = useState<string | null>(null)
+  const [deliveryTrendsError, setDeliveryTrendsError] = useState<string | null>(null)
   const [loadingState, setLoadingState] = useState(true)
   const [loadingTasks, setLoadingTasks] = useState(true)
   const [loadingDelivery, setLoadingDelivery] = useState(true)
+  const [loadingDeliveryTrends, setLoadingDeliveryTrends] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [creatingTask, setCreatingTask] = useState(false)
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null)
@@ -50,14 +55,14 @@ function App() {
       startTransition(() => {
         setState(nextState)
         setStateError(null)
-        const available = allRuntimeIssues(nextState)
-        if (available.length === 0 && !currentSelectedIssue) {
+        const nextSelected = selectPreferredIssue(nextState, tasks, currentSelectedIssue)
+        if (!nextSelected) {
           setDetail(null)
           setDetailError(null)
           return
         }
-        if (!currentSelectedIssue && available.length > 0) {
-          setSelectedIssue(available[0].issue_identifier)
+        if (nextSelected !== currentSelectedIssue) {
+          setSelectedIssue(nextSelected)
         }
       })
     } catch (error) {
@@ -78,8 +83,9 @@ function App() {
       startTransition(() => {
         setTasks(nextTasks)
         setTasksError(null)
-        if (!selectedIssue && nextTasks.tasks.length > 0) {
-          setSelectedIssue(nextTasks.tasks[0].identifier)
+        const nextSelected = selectPreferredIssue(state, nextTasks, selectedIssue)
+        if (nextSelected && nextSelected !== selectedIssue) {
+          setSelectedIssue(nextSelected)
         }
       })
     } catch (error) {
@@ -107,6 +113,24 @@ function App() {
     }
   }
 
+  async function performLoadDeliveryTrends(mode: 'initial' | 'refresh' = 'refresh') {
+    if (mode === 'initial') {
+      setLoadingDeliveryTrends(true)
+    }
+
+    try {
+      const nextTrends = await client.fetchDeliveryTrends()
+      startTransition(() => {
+        setDeliveryTrends(nextTrends)
+        setDeliveryTrendsError(null)
+      })
+    } catch (error) {
+      setDeliveryTrendsError(asMessage(error))
+    } finally {
+      setLoadingDeliveryTrends(false)
+    }
+  }
+
   async function performLoadDetail(identifier: string) {
     setLoadingDetail(true)
     try {
@@ -127,6 +151,7 @@ function App() {
     void performLoadState(mode)
     void performLoadTasks(mode)
     void performLoadDelivery(mode)
+    void performLoadDeliveryTrends(mode)
   })
 
   const loadDetailEffect = useEffectEvent((identifier: string) => {
@@ -158,6 +183,7 @@ function App() {
     await performLoadState('refresh', selectedIssue)
     await performLoadTasks('refresh')
     await performLoadDelivery('refresh')
+    await performLoadDeliveryTrends('refresh')
     if (selectedIssue) {
       await performLoadDetail(selectedIssue)
     }
@@ -176,9 +202,11 @@ function App() {
         description: draft.description?.trim() ? draft.description.trim() : undefined,
       })
       setDraft({ title: '', description: '', state: draft.state ?? 'Todo' })
+      startTransition(() => {
+        setTasks((current) => appendCreatedTask(current, created))
+      })
       setSelectedIssue(created.identifier)
       setTasksError(null)
-      await performLoadTasks('refresh')
       await performLoadState('refresh', created.identifier)
       await performLoadDetail(created.identifier)
     } catch (error) {
@@ -190,8 +218,10 @@ function App() {
 
   async function handleMoveTask(task: TaskRecord, stateName: string) {
     try {
-      await client.updateTask(task.identifier, { state: stateName })
-      await performLoadTasks('refresh')
+      const updated = await client.updateTask(task.identifier, { state: stateName })
+      startTransition(() => {
+        setTasks((current) => applyTaskUpdate(current, updated))
+      })
       await performLoadState('refresh', selectedIssue)
       if (selectedIssue === task.identifier) {
         await performLoadDetail(task.identifier)
@@ -242,7 +272,14 @@ function App() {
 
       {state ? (
         <>
-          <DeliveryInsightsPanel report={delivery} loading={loadingDelivery} error={deliveryError} />
+          <DeliveryInsightsPanel
+            report={delivery}
+            trends={deliveryTrends}
+            loading={loadingDelivery}
+            trendsLoading={loadingDeliveryTrends}
+            error={deliveryError}
+            trendsError={deliveryTrendsError}
+          />
 
           <section className="summary-grid">
             {summary.map((item) => (
@@ -540,10 +577,6 @@ function IssueList({ items, emptyMessage, selectedIssue, onSelect }: IssueListPr
       ))}
     </div>
   )
-}
-
-function allRuntimeIssues(state: RuntimeState): RuntimeIssue[] {
-  return [...state.running, ...state.retrying]
 }
 
 function formatDate(value: string): string {

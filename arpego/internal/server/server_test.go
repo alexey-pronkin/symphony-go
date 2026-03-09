@@ -40,7 +40,7 @@ func TestStateEndpointReturnsSummary(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/state", nil)
 	rec := httptest.NewRecorder()
-	NewHandler(runtime, nil, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, nil, nil, nil, "").ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d want 200", rec.Code)
@@ -77,14 +77,14 @@ func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/MT-649", nil)
 	rec := httptest.NewRecorder()
-	NewHandler(runtime, nil, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, nil, nil, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("known status = %d want 200", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/MT-999", nil)
 	rec = httptest.NewRecorder()
-	NewHandler(runtime, nil, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, nil, nil, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown status = %d want 404", rec.Code)
 	}
@@ -100,7 +100,7 @@ func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
 
 func TestRefreshEndpointQueuesPollAndMethodNotAllowed(t *testing.T) {
 	runtime := &fakeRuntime{}
-	handler := NewHandler(runtime, nil, nil, "")
+	handler := NewHandler(runtime, nil, nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/refresh", nil)
 	rec := httptest.NewRecorder()
@@ -125,7 +125,7 @@ func TestDashboardRootServesBuiltIndexWhenAvailable(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	NewHandler(&fakeRuntime{}, nil, nil, dashboardDir).ServeHTTP(rec, req)
+	NewHandler(&fakeRuntime{}, nil, nil, nil, dashboardDir).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d want 200", rec.Code)
@@ -137,7 +137,7 @@ func TestDashboardRootServesBuiltIndexWhenAvailable(t *testing.T) {
 
 func TestDashboardServesStaticAssetsAndSpaFallback(t *testing.T) {
 	dashboardDir := writeDashboardFiles(t)
-	handler := NewHandler(&fakeRuntime{}, nil, nil, dashboardDir)
+	handler := NewHandler(&fakeRuntime{}, nil, nil, nil, dashboardDir)
 
 	assetReq := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
 	assetRec := httptest.NewRecorder()
@@ -162,7 +162,7 @@ func TestDashboardServesStaticAssetsAndSpaFallback(t *testing.T) {
 
 func TestDashboardMissingAssetReturns404AndFallbackPlaceholder(t *testing.T) {
 	dashboardDir := writeDashboardFiles(t)
-	handler := NewHandler(&fakeRuntime{}, nil, nil, dashboardDir)
+	handler := NewHandler(&fakeRuntime{}, nil, nil, nil, dashboardDir)
 
 	req := httptest.NewRequest(http.MethodGet, "/assets/missing.js", nil)
 	rec := httptest.NewRecorder()
@@ -173,7 +173,7 @@ func TestDashboardMissingAssetReturns404AndFallbackPlaceholder(t *testing.T) {
 
 	fallbackReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	fallbackRec := httptest.NewRecorder()
-	NewHandler(&fakeRuntime{}, nil, nil, "").ServeHTTP(fallbackRec, fallbackReq)
+	NewHandler(&fakeRuntime{}, nil, nil, nil, "").ServeHTTP(fallbackRec, fallbackReq)
 	if fallbackRec.Code != http.StatusOK {
 		t.Fatalf("fallback status = %d want 200", fallbackRec.Code)
 	}
@@ -190,7 +190,7 @@ func TestTaskPlatformEndpointsListCreateUpdateAndUnavailable(t *testing.T) {
 		createdTask: tracker.Issue{ID: "task-2", Identifier: "SYM-2", Title: "Created", State: "Todo"},
 		updatedTask: tracker.Issue{ID: "task-1", Identifier: "SYM-1", Title: "Local task", State: "Done"},
 	}
-	handler := NewHandler(&fakeRuntime{}, platform, nil, "")
+	handler := NewHandler(&fakeRuntime{}, platform, nil, nil, "")
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	listRec := httptest.NewRecorder()
@@ -231,7 +231,7 @@ func TestTaskPlatformEndpointsListCreateUpdateAndUnavailable(t *testing.T) {
 		t.Fatalf("last update identifier = %q", platform.lastUpdateIdentifier)
 	}
 
-	unavailable := NewHandler(&fakeRuntime{}, nil, nil, "")
+	unavailable := NewHandler(&fakeRuntime{}, nil, nil, nil, "")
 	unavailableReq := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	unavailableRec := httptest.NewRecorder()
 	unavailable.ServeHTTP(unavailableRec, unavailableReq)
@@ -259,7 +259,7 @@ func TestMetricsEndpointExportsRuntimeAndTaskCounts(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
 
-	NewHandler(runtime, platform, nil, "").ServeHTTP(rec, req)
+	NewHandler(runtime, platform, nil, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d want 200", rec.Code)
 	}
@@ -280,7 +280,7 @@ func TestDeliveryInsightsEndpointReturnsReport(t *testing.T) {
 			},
 			Warnings: []string{"scm metrics degraded"},
 		},
-	}, "")
+	}, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/insights/delivery", nil)
 	rec := httptest.NewRecorder()
@@ -296,6 +296,109 @@ func TestDeliveryInsightsEndpointReturnsReport(t *testing.T) {
 	health := summary["delivery_health"].(map[string]any)
 	if health["score"] != float64(81) {
 		t.Fatalf("delivery health = %#v", health)
+	}
+}
+
+func TestDeliveryTrendEndpointReturnsTrendReport(t *testing.T) {
+	handler := NewHandler(&fakeRuntime{}, nil, fakeDeliveryInsights{
+		trends: insights.DeliveryTrendReport{
+			Window:    "7d",
+			Limit:     12,
+			Available: true,
+			Points: []insights.DeliveryTrendPoint{{
+				CapturedAt:     time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC),
+				DeliveryHealth: 78,
+			}},
+		},
+	}, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/insights/delivery/trends?window=7d&limit=12", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d want 200", rec.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if payload["window"] != "7d" {
+		t.Fatalf("window = %#v want 7d", payload["window"])
+	}
+	points := payload["points"].([]any)
+	if len(points) != 1 {
+		t.Fatalf("points len = %d want 1", len(points))
+	}
+}
+
+func TestDeliveryTrendEndpointRejectsInvalidWindow(t *testing.T) {
+	handler := NewHandler(&fakeRuntime{}, nil, fakeDeliveryInsights{
+		trendErr: insights.ErrInvalidTrendWindow,
+	}, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/insights/delivery/trends?window=365d", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d want 400", rec.Code)
+	}
+}
+
+func TestIssueEndpointEnrichesDetailWithPersistedRuntimeEvents(t *testing.T) {
+	runtime := &fakeRuntime{
+		issues: map[string]orchestrator.IssueDetail{
+			"MT-649": {
+				IssueIdentifier: "MT-649",
+				IssueID:         "issue-1",
+				Status:          "running",
+				Workspace:       orchestrator.WorkspaceInfo{Path: "/tmp/MT-649"},
+				Logs:            orchestrator.IssueLogs{},
+				RecentEvents: []orchestrator.IssueEvent{{
+					At:      time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC),
+					Event:   "turn.started",
+					Message: "turn started",
+				}},
+			},
+		},
+	}
+	observability := fakeObservability{
+		events: []tracker.RuntimeEvent{
+			{
+				IssueID:    "issue-1",
+				Identifier: "MT-649",
+				Name:       "session.started",
+				Message:    "session started",
+				ObservedAt: time.Date(2026, 3, 7, 11, 59, 0, 0, time.UTC),
+				LogPath:    "/tmp/MT-649/.symphony/session.jsonl",
+				SessionID:  "thread-1-turn-1",
+			},
+			{
+				IssueID:    "issue-1",
+				Identifier: "MT-649",
+				Name:       "turn.completed",
+				Message:    "turn completed",
+				ObservedAt: time.Date(2026, 3, 7, 12, 1, 0, 0, time.UTC),
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/MT-649", nil)
+	rec := httptest.NewRecorder()
+	NewHandler(runtime, nil, nil, observability, "").ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d want 200", rec.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	recentEvents := payload["recent_events"].([]any)
+	if len(recentEvents) != 3 {
+		t.Fatalf("recent events len = %d want 3", len(recentEvents))
+	}
+	logs := payload["logs"].(map[string]any)["codex_session_logs"].([]any)
+	if len(logs) != 1 {
+		t.Fatalf("log refs len = %d want 1", len(logs))
 	}
 }
 
@@ -328,12 +431,33 @@ type fakeTaskPlatform struct {
 }
 
 type fakeDeliveryInsights struct {
-	report insights.DeliveryReport
+	report   insights.DeliveryReport
+	err      error
+	trends   insights.DeliveryTrendReport
+	trendErr error
+}
+
+type fakeObservability struct {
+	events []tracker.RuntimeEvent
 	err    error
 }
 
 func (f fakeDeliveryInsights) Delivery(context.Context) (insights.DeliveryReport, error) {
 	return f.report, f.err
+}
+
+func (f fakeDeliveryInsights) Trends(
+	context.Context,
+	insights.DeliveryTrendQuery,
+) (insights.DeliveryTrendReport, error) {
+	return f.trends, f.trendErr
+}
+
+func (f fakeObservability) ListRuntimeEvents(
+	context.Context,
+	tracker.RuntimeEventQuery,
+) ([]tracker.RuntimeEvent, error) {
+	return f.events, f.err
 }
 
 func (f *fakeTaskPlatform) ListTasks(context.Context) ([]tracker.Issue, error) {
