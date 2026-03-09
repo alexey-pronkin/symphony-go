@@ -2,6 +2,12 @@
 
 This repository uses version-controlled git hooks plus per-stack lint and format commands.
 
+GitHub Actions currently gates:
+
+- legacy Elixir validation through `.github/workflows/make-all.yml`
+- primary Go and frontend validation through `.github/workflows/primary-stack.yml`
+- repository, config, and image security scanning through `.github/workflows/security.yml`
+
 ## Install Hooks
 
 ```bash
