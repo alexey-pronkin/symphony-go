@@ -18,14 +18,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Trivy repo scan
         id: repo_scan
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: fs
-          scan-ref: .
-          trivy-config: trivy.yaml
-          format: sarif
-          output: trivy-repo.sarif
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v "${PWD}:/work" \
+            -w /work \
+            aquasec/trivy:0.65.0 \
+            fs \
+            --config trivy.yaml \
+            --format sarif \
+            --output trivy-repo.sarif \
+            .
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload repo scan SARIF
         if: ${{ always() && hashFiles('trivy-repo.sarif') != '' }}
@@ -35,8 +42,8 @@ jobs:
           category: trivy-repo
 
       - name: Fail repo scan on findings or scanner error
-        if: ${{ steps.repo_scan.outcome == 'failure' }}
-        run: exit 1
+        if: ${{ steps.repo_scan.outputs.status != '0' }}
+        run: exit "${{ steps.repo_scan.outputs.status }}"
 
   config-scan:
     runs-on: ubuntu-24.04
@@ -44,14 +51,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Trivy config scan
         id: config_scan
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: config
-          scan-ref: .
-          severity: CRITICAL,HIGH
-          format: sarif
-          output: trivy-config.sarif
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v "${PWD}:/work" \
+            -w /work \
+            aquasec/trivy:0.65.0 \
+            config \
+            --quiet \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --output trivy-config.sarif \
+            .
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload config scan SARIF
         if: ${{ always() && hashFiles('trivy-config.sarif') != '' }}
@@ -61,8 +76,8 @@ jobs:
           category: trivy-config
 
       - name: Fail config scan on findings or scanner error
-        if: ${{ steps.config_scan.outcome == 'failure' }}
-        run: exit 1
+        if: ${{ steps.config_scan.outputs.status != '0' }}
+        run: exit "${{ steps.config_scan.outputs.status }}"
 
   image-scan:
     runs-on: ubuntu-24.04
@@ -84,15 +99,23 @@ jobs:
 
       - name: Trivy image scan
         id: image_scan
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: image
-          image-ref: ${{ matrix.image }}
-          ignore-unfixed: true
-          severity: CRITICAL,HIGH
-          format: sarif
-          output: trivy-${{ matrix.name }}.sarif
+        shell: bash
+        run: |
+          set +e
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}:/work" \
+            -w /work \
+            aquasec/trivy:0.65.0 \
+            image \
+            --ignore-unfixed \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --output trivy-${{ matrix.name }}.sarif \
+            ${{ matrix.image }}
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload image scan SARIF
         if: ${{ always() && hashFiles(format('trivy-{0}.sarif', matrix.name)) != '' }}
@@ -102,5 +125,5 @@ jobs:
           category: trivy-image-${{ matrix.name }}
 
       - name: Fail image scan on findings or scanner error
-        if: ${{ steps.image_scan.outcome == 'failure' }}
-        run: exit 1
+        if: ${{ steps.image_scan.outputs.status != '0' }}
+        run: exit "${{ steps.image_scan.outputs.status }}"
