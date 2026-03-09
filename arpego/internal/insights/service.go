@@ -2,6 +2,7 @@ package insights
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -19,14 +20,22 @@ type RuntimeProvider interface {
 	Snapshot() orchestrator.Snapshot
 }
 
-type GitInspector interface {
+type SCMInspector interface {
 	Inspect(context.Context, SourceConfig, time.Duration, time.Time) (SCMSourceMetrics, error)
 }
+
+type TrendStore interface {
+	AppendDeliverySnapshot(context.Context, DeliveryTrendPoint) error
+	ListDeliverySnapshots(context.Context, DeliveryTrendQuery, time.Time) ([]DeliveryTrendPoint, error)
+}
+
+var ErrInvalidTrendWindow = errors.New("invalid delivery trend window")
 
 type Service struct {
 	tasks            TaskProvider
 	runtime          RuntimeProvider
-	inspector        GitInspector
+	inspector        SCMInspector
+	trends           TrendStore
 	sources          []SourceConfig
 	now              func() time.Time
 	staleAfter       time.Duration
@@ -36,7 +45,8 @@ type Service struct {
 type Options struct {
 	Tasks            TaskProvider
 	Runtime          RuntimeProvider
-	Inspector        GitInspector
+	Inspector        SCMInspector
+	Trends           TrendStore
 	Sources          []SourceConfig
 	Now              func() time.Time
 	StaleAfter       time.Duration
@@ -50,7 +60,7 @@ func NewService(opts Options) *Service {
 	}
 	inspector := opts.Inspector
 	if inspector == nil {
-		inspector = GitGoInspector{}
+		inspector = DefaultInspector{}
 	}
 	staleAfter := opts.StaleAfter
 	if staleAfter <= 0 {
@@ -64,6 +74,7 @@ func NewService(opts Options) *Service {
 		tasks:            opts.Tasks,
 		runtime:          opts.Runtime,
 		inspector:        inspector,
+		trends:           opts.Trends,
 		sources:          append([]SourceConfig(nil), opts.Sources...),
 		now:              now,
 		staleAfter:       staleAfter,
@@ -92,6 +103,39 @@ func (s *Service) Delivery(ctx context.Context) (DeliveryReport, error) {
 	report.Warnings = append(report.Warnings, scmWarnings...)
 
 	report.Summary = buildSummary(report.Tracker, report.SCM)
+	if s.trends != nil {
+		if err := s.trends.AppendDeliverySnapshot(ctx, snapshotFromReport(report)); err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("delivery trend persistence degraded: %v", err))
+		}
+	}
+	return report, nil
+}
+
+func (s *Service) Trends(ctx context.Context, query DeliveryTrendQuery) (DeliveryTrendReport, error) {
+	now := s.now().UTC()
+	resolved, err := normalizeTrendQuery(query)
+	if err != nil {
+		return DeliveryTrendReport{}, err
+	}
+	report := DeliveryTrendReport{
+		GeneratedAt: now,
+		Window:      resolved.Window,
+		Limit:       resolved.Limit,
+		Available:   s.trends != nil,
+		Points:      []DeliveryTrendPoint{},
+		Warnings:    []string{},
+	}
+	if s.trends == nil {
+		report.Warnings = append(report.Warnings, "delivery trends degraded: historical analytics store is unavailable")
+		return report, nil
+	}
+	points, err := s.trends.ListDeliverySnapshots(ctx, resolved, now)
+	if err != nil {
+		report.Available = false
+		report.Warnings = append(report.Warnings, fmt.Sprintf("delivery trends degraded: %v", err))
+		return report, nil
+	}
+	report.Points = points
 	return report, nil
 }
 
@@ -178,6 +222,8 @@ func (s *Service) buildSCMMetrics(ctx context.Context, now time.Time) (SCMMetric
 				Name:       source.Name,
 				RepoPath:   source.RepoPath,
 				MainBranch: source.MainBranch,
+				Repository: source.Repository,
+				ProjectID:  source.ProjectID,
 				Warnings:   []string{err.Error()},
 			})
 			continue
@@ -189,6 +235,10 @@ func (s *Service) buildSCMMetrics(ctx context.Context, now time.Time) (SCMMetric
 		out.Totals.StaleBranches += metrics.StaleBranches
 		out.Totals.DriftCommits += metrics.DriftCommits
 		out.Totals.AheadCommits += metrics.AheadCommits
+		out.Totals.OpenChangeRequests += metrics.OpenChangeRequests
+		out.Totals.ApprovedChangeRequests += metrics.ApprovedChangeRequests
+		out.Totals.FailingChangeRequests += metrics.FailingChangeRequests
+		out.Totals.StaleChangeRequests += metrics.StaleChangeRequests
 		if metrics.MaxAgeHours > out.Totals.MaxAgeHours {
 			out.Totals.MaxAgeHours = metrics.MaxAgeHours
 		}
@@ -206,11 +256,19 @@ func buildSummary(trackerMetrics TrackerMetrics, scmMetrics SCMMetrics) Delivery
 	mergeScore := 100
 	if scmMetrics.ActiveSources > 0 {
 		branchBase := maxInt(scmMetrics.Totals.Branches, 1)
+		changeBase := maxInt(scmMetrics.Totals.OpenChangeRequests, 1)
+		branchComponent := 0.40*(1-ratio(scmMetrics.Totals.DriftCommits, maxInt(branchBase*8, 1))) +
+			0.35*(1-ratio(scmMetrics.Totals.StaleBranches, branchBase)) +
+			0.25*(1-ratio(scmMetrics.Totals.UnmergedBranches, branchBase))
+		reviewComponent := 1.0
+		if scmMetrics.Totals.OpenChangeRequests > 0 {
+			reviewComponent =
+				0.40*(1-ratio(scmMetrics.Totals.FailingChangeRequests, changeBase)) +
+					0.35*ratio(scmMetrics.Totals.ApprovedChangeRequests, changeBase) +
+					0.25*(1-ratio(scmMetrics.Totals.StaleChangeRequests, changeBase))
+		}
 		mergeScore = clampScore(
-			100 *
-				(0.40*(1-ratio(scmMetrics.Totals.DriftCommits, maxInt(branchBase*8, 1))) +
-					0.35*(1-ratio(scmMetrics.Totals.StaleBranches, branchBase)) +
-					0.25*(1-ratio(scmMetrics.Totals.UnmergedBranches, branchBase))),
+			100 * (0.55*branchComponent + 0.45*reviewComponent),
 		)
 	}
 	predictabilityScore := clampScore(
@@ -248,8 +306,9 @@ func buildSummary(trackerMetrics TrackerMetrics, scmMetrics SCMMetrics) Delivery
 			"Merge readiness",
 			mergeScore,
 			fmt.Sprintf(
-				"%d unmerged branches, %d drift commits.",
-				scmMetrics.Totals.UnmergedBranches,
+				"%d open changes, %d failing, %d drift commits.",
+				scmMetrics.Totals.OpenChangeRequests,
+				scmMetrics.Totals.FailingChangeRequests,
 				scmMetrics.Totals.DriftCommits,
 			),
 		),
@@ -351,6 +410,59 @@ func ratio(a, b int) float64 {
 
 func round2(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+func normalizeTrendQuery(query DeliveryTrendQuery) (DeliveryTrendQuery, error) {
+	window := strings.ToLower(strings.TrimSpace(query.Window))
+	if window == "" {
+		window = "7d"
+	}
+	switch window {
+	case "24h", "7d", "30d", "90d":
+	default:
+		return DeliveryTrendQuery{}, fmt.Errorf("%w: %s", ErrInvalidTrendWindow, query.Window)
+	}
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 48 {
+		limit = 48
+	}
+	return DeliveryTrendQuery{
+		Window: window,
+		Limit:  limit,
+	}, nil
+}
+
+func trendWindowDuration(window string) time.Duration {
+	switch window {
+	case "24h":
+		return 24 * time.Hour
+	case "30d":
+		return 30 * 24 * time.Hour
+	case "90d":
+		return 90 * 24 * time.Hour
+	default:
+		return 7 * 24 * time.Hour
+	}
+}
+
+func snapshotFromReport(report DeliveryReport) DeliveryTrendPoint {
+	return DeliveryTrendPoint{
+		CapturedAt:          report.GeneratedAt.UTC(),
+		DeliveryHealth:      report.Summary.DeliveryHealth.Score,
+		FlowEfficiency:      report.Summary.FlowEfficiency.Score,
+		MergeReadiness:      report.Summary.MergeReadiness.Score,
+		Predictability:      report.Summary.Predictability.Score,
+		ActiveTasks:         report.Tracker.ActiveTasks,
+		BlockedTasks:        report.Tracker.BlockedTasks,
+		DoneLastWindow:      report.Tracker.DoneLastWindow,
+		WIPCount:            report.Tracker.Kanban.WIPCount,
+		OpenChangeRequests:  report.SCM.Totals.OpenChangeRequests,
+		FailingChangeChecks: report.SCM.Totals.FailingChangeRequests,
+		WarningCount:        len(report.Warnings),
+	}
 }
 
 func clamp01(value float64) float64 {

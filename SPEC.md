@@ -379,6 +379,10 @@ Fields:
   - Used by `tracker.kind == "local"` with `tracker.storage == "postgres"`.
   - Implementations may also support a canonical environment variable such as
     `SYMPHONY_POSTGRES_DSN`.
+- `clickhouse_dsn` (string or `$VAR_NAME`)
+  - Optional runtime-event and observability store extension.
+  - Implementations may also support a canonical environment variable such as
+    `SYMPHONY_CLICKHOUSE_DSN`.
 
 #### 5.3.8 `insights` (object, optional extension)
 
@@ -391,12 +395,18 @@ Fields:
     - `name`: human-readable source label
     - `repo_path`: local repository path used for inspection
     - `main_branch`: branch used as the merge baseline, default `main`
+    - `api_url`: optional provider API base URL override
+    - `repository`: optional forge repository slug for GitHub/GitVerse-style providers
+    - `project_id`: optional project identifier for GitLab-style providers
+    - `api_token`: optional provider token or `$VAR`
 - `stale_branch_hours` (integer or string integer)
   - Default: `72`
   - Used by delivery metrics to classify stale branches.
 - `throughput_window_days` (integer or string integer)
   - Default: `7`
   - Used by delivery metrics to compute recent throughput.
+- `delivery_trend_window` is not required as config; implementations may instead expose bounded
+  request-time windows for historical delivery analytics backed by the observability store.
 
 #### 5.3.3 `workspace` (object)
 
@@ -593,6 +603,8 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.storage`: string, optional extension for `tracker.kind=local`, default `file`
 - `tracker.file`: path, optional extension for `tracker.kind=local`
 - `storage.postgres_dsn`: string or `$VAR`, optional extension for local Postgres storage
+- `storage.clickhouse_dsn`: string or `$VAR`, optional extension for ClickHouse-backed runtime
+  event retention, debug reads, and historical delivery trend snapshots
 - `insights.scm_sources`: list of SCM source objects for delivery metrics
 - `insights.stale_branch_hours`: integer, default `72`
 - `insights.throughput_window_days`: integer, default `7`
@@ -1579,10 +1591,48 @@ Minimum endpoints:
           "stale_branches": 1,
           "drift_commits": 4,
           "ahead_commits": 3,
-          "max_age_hours": 96.0
+          "max_age_hours": 96.0,
+          "open_change_requests": 2,
+          "approved_change_requests": 1,
+          "failing_change_requests": 1,
+          "stale_change_requests": 1
         }
       },
       "warnings": ["scm metrics degraded: no SCM sources configured"]
+    }
+    ```
+
+- `GET /api/v1/insights/delivery/trends` (optional delivery-trend extension)
+  - Returns bounded historical delivery snapshots for compact dashboard trend rendering.
+  - Implementations should accept a small window selector such as `24h`, `7d`, `30d`, or `90d`
+    and a point limit.
+  - If historical analytics storage is unavailable, implementations should prefer returning an
+    empty or partial payload with warnings over failing the whole dashboard.
+  - Suggested response shape:
+
+    ```json
+    {
+      "generated_at": "2026-03-08T12:00:00Z",
+      "window": "7d",
+      "limit": 12,
+      "available": true,
+      "points": [
+        {
+          "captured_at": "2026-03-07T12:00:00Z",
+          "delivery_health": 77,
+          "flow_efficiency": 71,
+          "merge_readiness": 69,
+          "predictability": 73,
+          "active_tasks": 5,
+          "blocked_tasks": 1,
+          "done_last_window": 4,
+          "wip_count": 3,
+          "open_change_requests": 2,
+          "failing_change_checks": 0,
+          "warning_count": 0
+        }
+      ],
+      "warnings": []
     }
     ```
 

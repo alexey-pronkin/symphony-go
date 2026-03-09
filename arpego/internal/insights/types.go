@@ -10,6 +10,35 @@ type DeliveryReport struct {
 	Warnings    []string        `json:"warnings"`
 }
 
+type DeliveryTrendQuery struct {
+	Window string
+	Limit  int
+}
+
+type DeliveryTrendReport struct {
+	GeneratedAt time.Time            `json:"generated_at"`
+	Window      string               `json:"window"`
+	Limit       int                  `json:"limit"`
+	Available   bool                 `json:"available"`
+	Points      []DeliveryTrendPoint `json:"points"`
+	Warnings    []string             `json:"warnings"`
+}
+
+type DeliveryTrendPoint struct {
+	CapturedAt          time.Time `json:"captured_at"`
+	DeliveryHealth      int       `json:"delivery_health"`
+	FlowEfficiency      int       `json:"flow_efficiency"`
+	MergeReadiness      int       `json:"merge_readiness"`
+	Predictability      int       `json:"predictability"`
+	ActiveTasks         int       `json:"active_tasks"`
+	BlockedTasks        int       `json:"blocked_tasks"`
+	DoneLastWindow      int       `json:"done_last_window"`
+	WIPCount            int       `json:"wip_count"`
+	OpenChangeRequests  int       `json:"open_change_requests"`
+	FailingChangeChecks int       `json:"failing_change_checks"`
+	WarningCount        int       `json:"warning_count"`
+}
+
 type DeliverySummary struct {
 	DeliveryHealth IntegralMetric `json:"delivery_health"`
 	FlowEfficiency IntegralMetric `json:"flow_efficiency"`
@@ -64,27 +93,37 @@ type SCMMetrics struct {
 }
 
 type SCMTotals struct {
-	Branches         int     `json:"branches"`
-	UnmergedBranches int     `json:"unmerged_branches"`
-	StaleBranches    int     `json:"stale_branches"`
-	DriftCommits     int     `json:"drift_commits"`
-	AheadCommits     int     `json:"ahead_commits"`
-	MaxAgeHours      float64 `json:"max_age_hours"`
+	Branches               int     `json:"branches"`
+	UnmergedBranches       int     `json:"unmerged_branches"`
+	StaleBranches          int     `json:"stale_branches"`
+	DriftCommits           int     `json:"drift_commits"`
+	AheadCommits           int     `json:"ahead_commits"`
+	MaxAgeHours            float64 `json:"max_age_hours"`
+	OpenChangeRequests     int     `json:"open_change_requests"`
+	ApprovedChangeRequests int     `json:"approved_change_requests"`
+	FailingChangeRequests  int     `json:"failing_change_requests"`
+	StaleChangeRequests    int     `json:"stale_change_requests"`
 }
 
 type SCMSourceMetrics struct {
-	Kind             string   `json:"kind"`
-	Name             string   `json:"name"`
-	RepoPath         string   `json:"repo_path"`
-	MainBranch       string   `json:"main_branch"`
-	Branches         int      `json:"branches"`
-	UnmergedBranches int      `json:"unmerged_branches"`
-	StaleBranches    int      `json:"stale_branches"`
-	DriftCommits     int      `json:"drift_commits"`
-	AheadCommits     int      `json:"ahead_commits"`
-	MaxAgeHours      float64  `json:"max_age_hours"`
-	MergeReadiness   int      `json:"merge_readiness"`
-	Warnings         []string `json:"warnings,omitempty"`
+	Kind                   string   `json:"kind"`
+	Name                   string   `json:"name"`
+	RepoPath               string   `json:"repo_path"`
+	MainBranch             string   `json:"main_branch"`
+	Repository             string   `json:"repository,omitempty"`
+	ProjectID              string   `json:"project_id,omitempty"`
+	Branches               int      `json:"branches"`
+	UnmergedBranches       int      `json:"unmerged_branches"`
+	StaleBranches          int      `json:"stale_branches"`
+	DriftCommits           int      `json:"drift_commits"`
+	AheadCommits           int      `json:"ahead_commits"`
+	MaxAgeHours            float64  `json:"max_age_hours"`
+	OpenChangeRequests     int      `json:"open_change_requests"`
+	ApprovedChangeRequests int      `json:"approved_change_requests"`
+	FailingChangeRequests  int      `json:"failing_change_requests"`
+	StaleChangeRequests    int      `json:"stale_change_requests"`
+	MergeReadiness         int      `json:"merge_readiness"`
+	Warnings               []string `json:"warnings,omitempty"`
 }
 
 type SourceConfig struct {
@@ -92,4 +131,8 @@ type SourceConfig struct {
 	Name       string
 	RepoPath   string
 	MainBranch string
+	APIURL     string
+	Repository string
+	ProjectID  string
+	APIToken   string
 }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hasDeliveryWarnings, orderedDeliveryCards } from './delivery-insights.ts'
+import { deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from './delivery-insights.ts'
 import type { DeliveryInsights } from './api.ts'
 
 test('orderedDeliveryCards keeps the dashboard metric order stable', () => {
@@ -15,6 +15,12 @@ test('hasDeliveryWarnings reports degraded delivery metrics state', () => {
   assert.equal(hasDeliveryWarnings(sampleReport()), true)
   assert.equal(hasDeliveryWarnings({ ...sampleReport(), warnings: [] }), false)
   assert.equal(hasDeliveryWarnings(null), false)
+})
+
+test('deliveryObservabilityState distinguishes degraded and unavailable delivery metrics', () => {
+  assert.equal(deliveryObservabilityState(sampleReport(), null), 'degraded')
+  assert.equal(deliveryObservabilityState({ ...sampleReport(), warnings: [] }, null), 'healthy')
+  assert.equal(deliveryObservabilityState(null, 'delivery unavailable'), 'unavailable')
 })
 
 function sampleReport(): DeliveryInsights {
@@ -84,6 +90,10 @@ function sampleReport(): DeliveryInsights {
         drift_commits: 4,
         ahead_commits: 3,
         max_age_hours: 96,
+        open_change_requests: 2,
+        approved_change_requests: 1,
+        failing_change_requests: 1,
+        stale_change_requests: 1,
       },
       sources: [],
     },

@@ -105,6 +105,146 @@ func TestServiceWarnsWhenSCMSourcesMissing(t *testing.T) {
 	}
 }
 
+func TestServiceAggregatesProviderChangeRequestTotals(t *testing.T) {
+	service := NewService(Options{
+		Inspector: fakeInspector{
+			metrics: SCMSourceMetrics{
+				Kind:                   "github",
+				Name:                   "origin",
+				OpenChangeRequests:     3,
+				ApprovedChangeRequests: 2,
+				FailingChangeRequests:  1,
+				StaleChangeRequests:    1,
+			},
+		},
+		Sources: []SourceConfig{{
+			Kind:       "github",
+			Name:       "origin",
+			Repository: "org/repo",
+		}},
+		Now: nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	report, err := service.Delivery(context.Background())
+	if err != nil {
+		t.Fatalf("Delivery: %v", err)
+	}
+	if report.SCM.Totals.OpenChangeRequests != 3 {
+		t.Fatalf("open change requests = %d want 3", report.SCM.Totals.OpenChangeRequests)
+	}
+	if report.SCM.Totals.ApprovedChangeRequests != 2 {
+		t.Fatalf("approved change requests = %d want 2", report.SCM.Totals.ApprovedChangeRequests)
+	}
+	if report.Summary.MergeReadiness.Score <= 0 {
+		t.Fatalf("merge readiness score = %d", report.Summary.MergeReadiness.Score)
+	}
+}
+
+func TestServiceDegradesWhenProviderSourceFails(t *testing.T) {
+	service := NewService(Options{
+		Inspector: fakeInspector{err: context.DeadlineExceeded},
+		Sources: []SourceConfig{{
+			Kind:       "gitverse",
+			Name:       "gitverse",
+			Repository: "team/repo",
+		}},
+		Now: nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	report, err := service.Delivery(context.Background())
+	if err != nil {
+		t.Fatalf("Delivery: %v", err)
+	}
+	if len(report.Warnings) == 0 {
+		t.Fatal("expected warnings")
+	}
+	if len(report.SCM.Sources) != 1 || len(report.SCM.Sources[0].Warnings) == 0 {
+		t.Fatalf("source warnings = %#v", report.SCM.Sources)
+	}
+}
+
+func TestServicePersistsDeliveryTrendSnapshots(t *testing.T) {
+	store := &fakeTrendStore{}
+	service := NewService(Options{
+		Tasks: fakeTaskProvider{tasks: []tracker.Issue{
+			{ID: "task-1", Identifier: "SYM-1", Title: "Active", State: "In Progress"},
+		}},
+		Inspector: fakeInspector{},
+		Trends:    store,
+		Now:       nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	report, err := service.Delivery(context.Background())
+	if err != nil {
+		t.Fatalf("Delivery: %v", err)
+	}
+	if len(store.appended) != 1 {
+		t.Fatalf("appended snapshots = %d want 1", len(store.appended))
+	}
+	if store.appended[0].DeliveryHealth != report.Summary.DeliveryHealth.Score {
+		t.Fatalf("stored health = %d want %d", store.appended[0].DeliveryHealth, report.Summary.DeliveryHealth.Score)
+	}
+}
+
+func TestServiceReturnsDeliveryTrends(t *testing.T) {
+	now := time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)
+	store := &fakeTrendStore{
+		listed: []DeliveryTrendPoint{{
+			CapturedAt:     now.Add(-24 * time.Hour),
+			DeliveryHealth: 66,
+		}, {
+			CapturedAt:     now.Add(-12 * time.Hour),
+			DeliveryHealth: 77,
+		}},
+	}
+	service := NewService(Options{
+		Trends: store,
+		Now:    nowFunc(now),
+	})
+
+	report, err := service.Trends(context.Background(), DeliveryTrendQuery{Window: "7d", Limit: 8})
+	if err != nil {
+		t.Fatalf("Trends: %v", err)
+	}
+	if !report.Available {
+		t.Fatal("expected available trends")
+	}
+	if len(report.Points) != 2 {
+		t.Fatalf("trend points = %d want 2", len(report.Points))
+	}
+	if report.Points[1].DeliveryHealth != 77 {
+		t.Fatalf("latest trend health = %d want 77", report.Points[1].DeliveryHealth)
+	}
+}
+
+func TestServiceDegradesDeliveryTrendsWhenStoreMissing(t *testing.T) {
+	service := NewService(Options{
+		Now: nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	report, err := service.Trends(context.Background(), DeliveryTrendQuery{})
+	if err != nil {
+		t.Fatalf("Trends: %v", err)
+	}
+	if report.Available {
+		t.Fatal("expected unavailable trends")
+	}
+	if len(report.Warnings) == 0 {
+		t.Fatal("expected trend warning")
+	}
+}
+
+func TestServiceRejectsInvalidTrendWindows(t *testing.T) {
+	service := NewService(Options{
+		Now: nowFunc(time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC)),
+	})
+
+	_, err := service.Trends(context.Background(), DeliveryTrendQuery{Window: "365d"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 type fakeTaskProvider struct {
 	tasks []tracker.Issue
 }
@@ -126,8 +266,27 @@ type fakeInspector struct {
 	err     error
 }
 
+type fakeTrendStore struct {
+	appended []DeliveryTrendPoint
+	listed   []DeliveryTrendPoint
+	err      error
+}
+
 func (f fakeInspector) Inspect(context.Context, SourceConfig, time.Duration, time.Time) (SCMSourceMetrics, error) {
 	return f.metrics, f.err
+}
+
+func (f *fakeTrendStore) AppendDeliverySnapshot(_ context.Context, point DeliveryTrendPoint) error {
+	f.appended = append(f.appended, point)
+	return f.err
+}
+
+func (f *fakeTrendStore) ListDeliverySnapshots(
+	_ context.Context,
+	_ DeliveryTrendQuery,
+	_ time.Time,
+) ([]DeliveryTrendPoint, error) {
+	return f.listed, f.err
 }
 
 func nowFunc(now time.Time) func() time.Time {

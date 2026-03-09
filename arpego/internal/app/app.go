@@ -49,11 +49,17 @@ func RunArgs(args []string) error {
 		return err
 	}
 	defer closeQuietly(trackerCloser)
+	observability, err := buildObservabilityServices(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(observability)
 	orc := orchestrator.New(orchestrator.Options{
 		Config:   cfg,
 		Workflow: def,
 		Logger:   logger,
 		Tracker:  trackerClient,
+		Events:   observability.runtimeEvents,
 	})
 	if err := orc.Start(ctx); err != nil {
 		return err
@@ -75,7 +81,8 @@ func RunArgs(args []string) error {
 		httpServer = server.New(
 			orc,
 			taskPlatform,
-			buildDeliveryInsights(cfg, taskPlatform, orc),
+			buildDeliveryInsights(cfg, taskPlatform, orc, observability.deliveryTrends),
+			observability.observability,
 			port,
 			detectDashboardDir(),
 		)
@@ -100,6 +107,7 @@ func buildDeliveryInsights(
 	cfg config.Config,
 	tasks server.TaskPlatform,
 	runtime server.Runtime,
+	trends insights.TrendStore,
 ) *insights.Service {
 	sources := make([]insights.SourceConfig, 0, len(cfg.InsightsSCMSources()))
 	for _, source := range cfg.InsightsSCMSources() {
@@ -108,11 +116,16 @@ func buildDeliveryInsights(
 			Name:       source.Name,
 			RepoPath:   source.RepoPath,
 			MainBranch: source.MainBranch,
+			APIURL:     source.APIURL,
+			Repository: source.Repository,
+			ProjectID:  source.ProjectID,
+			APIToken:   source.APIToken,
 		})
 	}
 	return insights.NewService(insights.Options{
 		Tasks:            tasks,
 		Runtime:          runtime,
+		Trends:           trends,
 		Sources:          sources,
 		StaleAfter:       time.Duration(cfg.InsightsStaleBranchHours()) * time.Hour,
 		ThroughputWindow: time.Duration(cfg.InsightsThroughputWindowDays()) * 24 * time.Hour,
@@ -203,6 +216,70 @@ func buildTrackerServices(
 	local := tracker.NewLocalPlatform(resolveTaskFile(workflowPath, cfg), cfg.TrackerProjectSlug())
 	service := tracker.NewTaskService(local, local)
 	return service, service, nil, nil
+}
+
+func buildObservabilityServices(
+	ctx context.Context,
+	cfg config.Config,
+) (observabilityServices, error) {
+	if strings.TrimSpace(cfg.StorageClickHouseDSN()) == "" {
+		return observabilityServices{}, nil
+	}
+	runtimeStore, err := tracker.OpenClickHouseObservability(
+		ctx,
+		cfg.StorageClickHouseDSN(),
+		cfg.TrackerProjectSlug(),
+	)
+	if err != nil {
+		return observabilityServices{}, fmt.Errorf("open clickhouse observability: %w", err)
+	}
+	trendStore, err := insights.OpenClickHouseTrendStore(
+		ctx,
+		cfg.StorageClickHouseDSN(),
+		cfg.TrackerProjectSlug(),
+	)
+	if err != nil {
+		_ = runtimeStore.Close()
+		return observabilityServices{}, fmt.Errorf("open clickhouse delivery trends: %w", err)
+	}
+	return observabilityServices{
+		runtimeEvents:  runtimeStore,
+		observability:  runtimeStore,
+		deliveryTrends: trendStore,
+		closer: multiCloser{
+			runtimeStore,
+			trendStore,
+		},
+	}, nil
+}
+
+type observabilityServices struct {
+	runtimeEvents  tracker.RuntimeEventSink
+	observability  server.Observability
+	deliveryTrends insights.TrendStore
+	closer         io.Closer
+}
+
+func (s observabilityServices) Close() error {
+	if s.closer == nil {
+		return nil
+	}
+	return s.closer.Close()
+}
+
+type multiCloser []io.Closer
+
+func (m multiCloser) Close() error {
+	var firstErr error
+	for _, closer := range m {
+		if closer == nil {
+			continue
+		}
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func resolveTaskFile(workflowPath string, cfg config.Config) string {
