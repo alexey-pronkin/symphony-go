@@ -1,5 +1,12 @@
+import { useState } from 'react'
 import type { DeliveryInsights, DeliveryTrendReport } from '../lib/api'
-import { buildDeliveryRollupAlerts, deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
+import {
+  buildDeliveryRollupAlerts,
+  deliveryObservabilityState,
+  deliverySourceKey,
+  hasDeliveryWarnings,
+  orderedDeliveryCards,
+} from '../lib/delivery-insights'
 
 type DeliveryInsightsPanelProps = {
   report: DeliveryInsights | null
@@ -11,6 +18,8 @@ type DeliveryInsightsPanelProps = {
 }
 
 export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, error, trendsError }: DeliveryInsightsPanelProps) {
+  const [focusedSourceKey, setFocusedSourceKey] = useState<string | null>(null)
+
   if (loading && !report) {
     return (
       <section className="panel delivery-panel">
@@ -46,6 +55,8 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   const cards = orderedDeliveryCards(report)
   const alerts = buildDeliveryRollupAlerts(report)
   const status = deliveryObservabilityState(report, error)
+  const resolvedFocusedSourceKey =
+    focusedSourceKey && report.scm.sources.some((source) => deliverySourceKey(source) === focusedSourceKey) ? focusedSourceKey : null
 
   return (
     <section className={`panel delivery-panel delivery-panel-${status}`}>
@@ -59,12 +70,20 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
       {alerts.length > 0 ? (
         <div className="delivery-alert-list">
           {alerts.map((alert) => (
-            <article className={`delivery-alert delivery-alert-${alert.severity}`} key={`${alert.severity}-${alert.title}-${alert.detail}`}>
+            <article
+              className={`delivery-alert delivery-alert-${alert.severity}${alert.sourceKey ? ' delivery-alert-actionable' : ''}`}
+              key={`${alert.severity}-${alert.title}-${alert.detail}-${alert.sourceKey ?? ''}`}
+            >
               <div className="delivery-alert-top">
                 <span>{alert.severity === 'critical' ? 'Critical' : 'Warning'}</span>
                 <strong>{alert.title}</strong>
               </div>
               <p>{alert.detail}</p>
+              {alert.sourceKey ? (
+                <button type="button" className="ghost-button" onClick={() => setFocusedSourceKey(alert.sourceKey ?? null)}>
+                  Focus source
+                </button>
+              ) : null}
             </article>
           ))}
         </div>
@@ -162,14 +181,19 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
       </div>
 
       <div className="delivery-source-list">
+        {resolvedFocusedSourceKey ? <p className="delivery-focus-note">Focused source selected from delivery alerts.</p> : null}
         {report.scm.sources.map((source) => (
-          <article className="delivery-source" key={`${source.kind}-${source.name}-${source.repo_path}`}>
+          <article
+            className={`delivery-source${deliverySourceKey(source) === resolvedFocusedSourceKey ? ' delivery-source-focused' : ''}`}
+            key={`${source.kind}-${source.name}-${source.repo_path}`}
+          >
             <header>
               <strong>{source.name}</strong>
               <span>
                 {source.kind} · {source.main_branch}
               </span>
             </header>
+            {deliverySourceKey(source) === resolvedFocusedSourceKey ? <p className="delivery-source-focus-label">Focused source</p> : null}
             <p>{source.repo_path}</p>
             <div className="delivery-source-metrics">
               <span>{source.branches} branches</span>
