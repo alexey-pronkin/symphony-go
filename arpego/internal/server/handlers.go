@@ -39,11 +39,16 @@ type Observability interface {
 	ListRuntimeEvents(context.Context, tracker.RuntimeEventQuery) ([]tracker.RuntimeEvent, error)
 }
 
+type WorkspaceSecurityScanner interface {
+	ScanWorkspace(context.Context, string) orchestrator.WorkspaceScan
+}
+
 func NewHandler(
 	runtime Runtime,
 	tasks TaskPlatform,
 	delivery DeliveryInsights,
 	observability Observability,
+	workspaceScanner WorkspaceSecurityScanner,
 	dashboardDir string,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -57,7 +62,7 @@ func NewHandler(
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-			handleAPI(runtime, tasks, delivery, observability, w, r)
+			handleAPI(runtime, tasks, delivery, observability, workspaceScanner, w, r)
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -108,6 +113,7 @@ func handleAPI(
 	tasks TaskPlatform,
 	delivery DeliveryInsights,
 	observability Observability,
+	workspaceScanner WorkspaceSecurityScanner,
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -168,6 +174,10 @@ func handleAPI(
 		}
 		if observability != nil {
 			detail = enrichIssueDetail(r.Context(), observability, detail)
+		}
+		if workspaceScanner != nil && detail.Workspace.Path != "" {
+			scan := workspaceScanner.ScanWorkspace(r.Context(), detail.Workspace.Path)
+			detail.WorkspaceScan = &scan
 		}
 		writeJSON(w, http.StatusOK, detail)
 	default:

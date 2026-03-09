@@ -15,6 +15,7 @@ import (
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/insights"
 	ilog "github.com/alexey-pronkin/symphony-go/arpego/internal/logging"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/orchestrator"
+	"github.com/alexey-pronkin/symphony-go/arpego/internal/securityscan"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/server"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/tracker"
 	"github.com/alexey-pronkin/symphony-go/arpego/internal/workflow"
@@ -78,11 +79,20 @@ func RunArgs(args []string) error {
 
 	var httpServer *server.Server
 	if port, ok := resolvePort(cliPort, cliPortSet, def.Config); ok {
+		var workspaceScanner server.WorkspaceSecurityScanner
+		if cfg.SecurityWorkspaceScanEnabled() {
+			workspaceScanner = securityscan.NewTrivyScanner(
+				cfg.SecurityWorkspaceScanCommand(),
+				time.Duration(cfg.SecurityWorkspaceScanTimeoutMs())*time.Millisecond,
+				time.Duration(cfg.SecurityWorkspaceScanTTLSeconds())*time.Second,
+			)
+		}
 		httpServer = server.New(
 			orc,
 			taskPlatform,
 			buildDeliveryInsights(cfg, taskPlatform, orc, observability.deliveryTrends),
 			observability.observability,
+			workspaceScanner,
 			port,
 			detectDashboardDir(),
 		)
