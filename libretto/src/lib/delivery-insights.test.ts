@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from './delivery-insights.ts'
+import { buildDeliveryRollupAlerts, deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from './delivery-insights.ts'
 import type { DeliveryInsights } from './api.ts'
 
 test('orderedDeliveryCards keeps the dashboard metric order stable', () => {
@@ -21,6 +21,47 @@ test('deliveryObservabilityState distinguishes degraded and unavailable delivery
   assert.equal(deliveryObservabilityState(sampleReport(), null), 'degraded')
   assert.equal(deliveryObservabilityState({ ...sampleReport(), warnings: [] }, null), 'healthy')
   assert.equal(deliveryObservabilityState(null, 'delivery unavailable'), 'unavailable')
+})
+
+test('buildDeliveryRollupAlerts prioritizes critical issues before warnings', () => {
+  const alerts = buildDeliveryRollupAlerts(sampleReport())
+  assert.equal(alerts[0]?.severity, 'critical')
+  assert.equal(alerts[0]?.title, 'Failing change requests detected')
+  assert.match(alerts[0]?.detail ?? '', /1 change request/)
+})
+
+test('buildDeliveryRollupAlerts deduplicates repeated warning messages', () => {
+  const alerts = buildDeliveryRollupAlerts({
+    ...sampleReport(),
+    summary: {
+      delivery_health: { ...sampleReport().summary.delivery_health, status: 'strong', detail: 'healthy' },
+      flow_efficiency: { ...sampleReport().summary.flow_efficiency, status: 'strong', detail: 'healthy' },
+      merge_readiness: { ...sampleReport().summary.merge_readiness, status: 'strong', detail: 'healthy' },
+      predictability: { ...sampleReport().summary.predictability, status: 'strong', detail: 'healthy' },
+    },
+    warnings: ['scm metrics degraded', 'scm metrics degraded'],
+    scm: {
+      ...sampleReport().scm,
+      totals: {
+        ...sampleReport().scm.totals,
+        stale_branches: 0,
+        stale_change_requests: 0,
+        failing_change_requests: 0,
+      },
+      sources: [
+        {
+          ...sampleReport().scm.sources[0],
+          failing_change_requests: 0,
+          stale_change_requests: 0,
+          warnings: ['provider timeout', 'provider timeout'],
+        },
+      ],
+    },
+  })
+  const duplicateWarnings = alerts.filter((alert) => alert.detail === 'scm metrics degraded')
+  const sourceWarnings = alerts.filter((alert) => alert.detail === 'provider timeout')
+  assert.equal(duplicateWarnings.length, 1)
+  assert.equal(sourceWarnings.length, 1)
 })
 
 function sampleReport(): DeliveryInsights {
@@ -95,7 +136,26 @@ function sampleReport(): DeliveryInsights {
         failing_change_requests: 1,
         stale_change_requests: 1,
       },
-      sources: [],
+      sources: [
+        {
+          kind: 'github',
+          name: 'platform',
+          repo_path: '/tmp/platform',
+          main_branch: 'main',
+          branches: 3,
+          unmerged_branches: 2,
+          stale_branches: 1,
+          drift_commits: 4,
+          ahead_commits: 3,
+          max_age_hours: 96,
+          open_change_requests: 2,
+          approved_change_requests: 1,
+          failing_change_requests: 1,
+          stale_change_requests: 1,
+          merge_readiness: 69,
+          warnings: ['provider timeout'],
+        },
+      ],
     },
     warnings: ['scm metrics degraded'],
   }
