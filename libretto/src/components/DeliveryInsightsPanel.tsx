@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { DeliveryInsights, DeliveryTrendReport } from '../lib/api'
 import {
   buildDeliveryRollupAlerts,
+  countDeliveryRollupAlerts,
   deliveryObservabilityState,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
@@ -55,7 +56,9 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   }
 
   const cards = orderedDeliveryCards(report)
-  const alerts = filterDeliveryRollupAlerts(buildDeliveryRollupAlerts(report), alertSeverityFilter)
+  const allAlerts = buildDeliveryRollupAlerts(report)
+  const alertCounts = countDeliveryRollupAlerts(allAlerts)
+  const alerts = filterDeliveryRollupAlerts(allAlerts, alertSeverityFilter)
   const status = deliveryObservabilityState(report, error)
   const resolvedFocusedSourceKey =
     focusedSourceKey && report.scm.sources.some((source) => deliverySourceKey(source) === focusedSourceKey) ? focusedSourceKey : null
@@ -68,14 +71,26 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
           <h2>Operational signals</h2>
         </div>
         <div className="delivery-alert-filter-group">
-          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('all')}>
-            All
+          <button
+            type="button"
+            className={`ghost-button${alertSeverityFilter === 'all' ? ' delivery-alert-filter-active' : ''}`}
+            onClick={() => setAlertSeverityFilter('all')}
+          >
+            All ({alertCounts.all})
           </button>
-          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('critical')}>
-            Critical
+          <button
+            type="button"
+            className={`ghost-button${alertSeverityFilter === 'critical' ? ' delivery-alert-filter-active' : ''}`}
+            onClick={() => setAlertSeverityFilter('critical')}
+          >
+            Critical ({alertCounts.critical})
           </button>
-          <button type="button" className="ghost-button" onClick={() => setAlertSeverityFilter('warning')}>
-            Warnings
+          <button
+            type="button"
+            className={`ghost-button${alertSeverityFilter === 'warning' ? ' delivery-alert-filter-active' : ''}`}
+            onClick={() => setAlertSeverityFilter('warning')}
+          >
+            Warnings ({alertCounts.warning})
           </button>
         </div>
       </div>
@@ -100,7 +115,13 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
             </article>
           ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="delivery-alert-empty">
+          {alertSeverityFilter === 'all'
+            ? 'No delivery alerts are active for the current report.'
+            : `No ${alertSeverityFilter} delivery alerts are active for the current report.`}
+        </div>
+      )}
 
       <div className="delivery-card-grid">
         {cards.map((card) => (
