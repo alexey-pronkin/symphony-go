@@ -1,13 +1,16 @@
-import type { DeliveryInsights } from '../lib/api'
+import type { DeliveryInsights, DeliveryTrendReport } from '../lib/api'
 import { deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
 
 type DeliveryInsightsPanelProps = {
   report: DeliveryInsights | null
+  trends: DeliveryTrendReport | null
   loading: boolean
+  trendsLoading: boolean
   error: string | null
+  trendsError: string | null
 }
 
-export function DeliveryInsightsPanel({ report, loading, error }: DeliveryInsightsPanelProps) {
+export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, error, trendsError }: DeliveryInsightsPanelProps) {
   if (loading && !report) {
     return (
       <section className="panel delivery-panel">
@@ -62,6 +65,13 @@ export function DeliveryInsightsPanel({ report, loading, error }: DeliveryInsigh
             <p>{card.detail}</p>
           </article>
         ))}
+      </div>
+
+      <div className="delivery-trend-grid">
+        {metricTrendCard('Delivery health', trends, trendsLoading, trendsError, (point) => point.delivery_health)}
+        {metricTrendCard('Flow efficiency', trends, trendsLoading, trendsError, (point) => point.flow_efficiency)}
+        {metricTrendCard('Merge readiness', trends, trendsLoading, trendsError, (point) => point.merge_readiness)}
+        {metricTrendCard('Predictability', trends, trendsLoading, trendsError, (point) => point.predictability)}
       </div>
 
       {hasDeliveryWarnings(report) ? (
@@ -170,4 +180,47 @@ export function DeliveryInsightsPanel({ report, loading, error }: DeliveryInsigh
 
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`
+}
+
+function metricTrendCard(
+  label: string,
+  trends: DeliveryTrendReport | null,
+  loading: boolean,
+  error: string | null,
+  select: (point: DeliveryTrendReport['points'][number]) => number
+) {
+  const points = trends?.points ?? []
+  const values = points.map(select)
+  const current = values.at(-1)
+  const previous = values.length > 1 ? values.at(-2) : undefined
+  const delta = current != null && previous != null ? current - previous : null
+
+  return (
+    <article className="delivery-trend-card" key={label}>
+      <div className="delivery-trend-top">
+        <span>{label}</span>
+        <strong>{current ?? '—'}</strong>
+      </div>
+      <div className="delivery-sparkline" aria-hidden="true">
+        {values.length > 0 ? (
+          values.map((value, index) => (
+            <span
+              className="delivery-spark"
+              key={`${label}-${index}`}
+              style={{ height: `${Math.max(16, Math.round((value / 100) * 64))}px` }}
+            />
+          ))
+        ) : (
+          <span className="delivery-trend-empty">No trend points yet</span>
+        )}
+      </div>
+      <p>
+        {loading ? 'Loading trend history…' : null}
+        {!loading && error ? error : null}
+        {!loading && !error && delta != null ? `${delta >= 0 ? '+' : ''}${delta} from previous sample` : null}
+        {!loading && !error && delta == null && points.length > 0 ? `${points.length} samples in ${trends?.window ?? 'window'}` : null}
+        {!loading && !error && points.length === 0 ? 'No historical samples captured yet' : null}
+      </p>
+    </article>
+  )
 }

@@ -93,7 +93,8 @@
 }
 
 .delivery-card-grid,
-.delivery-breakdown-grid {
+.delivery-breakdown-grid,
+.delivery-trend-grid {
   display: grid;
   gap: 14px;
 }
@@ -102,11 +103,57 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.delivery-trend-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .delivery-card {
   border-radius: 18px;
   padding: 16px;
   border: 1px solid var(--border);
   background: rgba(7, 19, 26, 0.76);
+}
+
+.delivery-trend-card {
+  border-radius: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  background: rgba(12, 28, 38, 0.82);
+}
+
+.delivery-trend-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.delivery-trend-top span {
+  color: var(--text-muted);
+}
+
+.delivery-trend-top strong {
+  font-size: 1.6rem;
+}
+
+.delivery-sparkline {
+  display: flex;
+  gap: 6px;
+  align-items: end;
+  min-height: 72px;
+  margin-top: 12px;
+}
+
+.delivery-spark {
+  flex: 1;
+  border-radius: 999px 999px 4px 4px;
+  background: linear-gradient(180deg, var(--accent-strong), var(--mint));
+  opacity: 0.9;
+}
+
+.delivery-trend-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 .delivery-card-top {

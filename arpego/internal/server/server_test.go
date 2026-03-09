@@ -299,6 +299,51 @@ func TestDeliveryInsightsEndpointReturnsReport(t *testing.T) {
 	}
 }
 
+func TestDeliveryTrendEndpointReturnsTrendReport(t *testing.T) {
+	handler := NewHandler(&fakeRuntime{}, nil, fakeDeliveryInsights{
+		trends: insights.DeliveryTrendReport{
+			Window:    "7d",
+			Limit:     12,
+			Available: true,
+			Points: []insights.DeliveryTrendPoint{{
+				CapturedAt:     time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC),
+				DeliveryHealth: 78,
+			}},
+		},
+	}, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/insights/delivery/trends?window=7d&limit=12", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d want 200", rec.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if payload["window"] != "7d" {
+		t.Fatalf("window = %#v want 7d", payload["window"])
+	}
+	points := payload["points"].([]any)
+	if len(points) != 1 {
+		t.Fatalf("points len = %d want 1", len(points))
+	}
+}
+
+func TestDeliveryTrendEndpointRejectsInvalidWindow(t *testing.T) {
+	handler := NewHandler(&fakeRuntime{}, nil, fakeDeliveryInsights{
+		trendErr: insights.ErrInvalidTrendWindow,
+	}, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/insights/delivery/trends?window=365d", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d want 400", rec.Code)
+	}
+}
+
 func TestIssueEndpointEnrichesDetailWithPersistedRuntimeEvents(t *testing.T) {
 	runtime := &fakeRuntime{
 		issues: map[string]orchestrator.IssueDetail{
@@ -386,8 +431,10 @@ type fakeTaskPlatform struct {
 }
 
 type fakeDeliveryInsights struct {
-	report insights.DeliveryReport
-	err    error
+	report   insights.DeliveryReport
+	err      error
+	trends   insights.DeliveryTrendReport
+	trendErr error
 }
 
 type fakeObservability struct {
@@ -397,6 +444,13 @@ type fakeObservability struct {
 
 func (f fakeDeliveryInsights) Delivery(context.Context) (insights.DeliveryReport, error) {
 	return f.report, f.err
+}
+
+func (f fakeDeliveryInsights) Trends(
+	context.Context,
+	insights.DeliveryTrendQuery,
+) (insights.DeliveryTrendReport, error) {
+	return f.trends, f.trendErr
 }
 
 func (f fakeObservability) ListRuntimeEvents(
