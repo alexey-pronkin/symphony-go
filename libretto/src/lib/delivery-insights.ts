@@ -4,6 +4,7 @@ export type DeliveryRollupAlert = {
   severity: 'critical' | 'warning'
   title: string
   detail: string
+  sourceKey?: string
 }
 
 export function filterDeliveryRollupAlerts(
@@ -86,11 +87,31 @@ export function buildDeliveryRollupAlerts(report: DeliveryInsights): DeliveryRol
   })
 
   report.scm.sources.forEach((source) => {
+    const sourceKey = deliverySourceKey(source)
+    if (source.failing_change_requests > 0) {
+      alerts.push({
+        severity: 'critical',
+        title: `${source.name} has failing change requests`,
+        detail: `${source.failing_change_requests} failing change request(s) are blocking merge readiness.`,
+        sourceKey,
+      })
+    }
+
+    if (source.stale_change_requests > 0) {
+      alerts.push({
+        severity: 'warning',
+        title: `${source.name} has stale change requests`,
+        detail: `${source.stale_change_requests} stale change request(s) need follow-up.`,
+        sourceKey,
+      })
+    }
+
     source.warnings?.forEach((warning) => {
       alerts.push({
         severity: 'warning',
         title: `${source.name} source warning`,
         detail: warning,
+        sourceKey,
       })
     })
   })
@@ -103,7 +124,7 @@ export function buildDeliveryRollupAlerts(report: DeliveryInsights): DeliveryRol
 function dedupeAlerts(alerts: DeliveryRollupAlert[]): DeliveryRollupAlert[] {
   const seen = new Set<string>()
   return alerts.filter((alert) => {
-    const key = `${alert.severity}:${alert.title}:${alert.detail}`
+    const key = `${alert.severity}:${alert.title}:${alert.detail}:${alert.sourceKey ?? ''}`
     if (seen.has(key)) {
       return false
     }
@@ -114,4 +135,8 @@ function dedupeAlerts(alerts: DeliveryRollupAlert[]): DeliveryRollupAlert[] {
 
 function severityRank(severity: DeliveryRollupAlert['severity']): number {
   return severity === 'critical' ? 0 : 1
+}
+
+export function deliverySourceKey(source: Pick<DeliveryInsights['scm']['sources'][number], 'kind' | 'name' | 'repo_path'>): string {
+  return `${source.kind}:${source.name}:${source.repo_path}`
 }
