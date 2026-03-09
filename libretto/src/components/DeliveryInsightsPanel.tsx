@@ -1,5 +1,5 @@
 import type { DeliveryInsights, DeliveryTrendReport } from '../lib/api'
-import { deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
+import { buildDeliveryRollupAlerts, deliveryObservabilityState, hasDeliveryWarnings, orderedDeliveryCards } from '../lib/delivery-insights'
 
 type DeliveryInsightsPanelProps = {
   report: DeliveryInsights | null
@@ -44,6 +44,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   }
 
   const cards = orderedDeliveryCards(report)
+  const alerts = buildDeliveryRollupAlerts(report)
   const status = deliveryObservabilityState(report, error)
 
   return (
@@ -54,6 +55,20 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
           <h2>Operational signals</h2>
         </div>
       </div>
+
+      {alerts.length > 0 ? (
+        <div className="delivery-alert-list">
+          {alerts.map((alert) => (
+            <article className={`delivery-alert delivery-alert-${alert.severity}`} key={`${alert.severity}-${alert.title}-${alert.detail}`}>
+              <div className="delivery-alert-top">
+                <span>{alert.severity === 'critical' ? 'Critical' : 'Warning'}</span>
+                <strong>{alert.title}</strong>
+              </div>
+              <p>{alert.detail}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       <div className="delivery-card-grid">
         {cards.map((card) => (

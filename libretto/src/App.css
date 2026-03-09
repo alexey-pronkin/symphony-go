@@ -93,10 +93,48 @@
 }
 
 .delivery-card-grid,
+.delivery-alert-list,
 .delivery-breakdown-grid,
 .delivery-trend-grid {
   display: grid;
   gap: 14px;
+}
+
+.delivery-alert-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.delivery-alert {
+  border-radius: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  background: rgba(12, 28, 38, 0.82);
+}
+
+.delivery-alert-top {
+  display: grid;
+  gap: 6px;
+}
+
+.delivery-alert-top span {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+}
+
+.delivery-alert-top strong {
+  font-size: 1rem;
+}
+
+.delivery-alert-critical {
+  border-color: rgba(255, 122, 89, 0.55);
+  background: rgba(95, 25, 20, 0.35);
+}
+
+.delivery-alert-warning {
+  border-color: rgba(247, 162, 96, 0.4);
+  background: rgba(79, 52, 21, 0.28);
 }
 
 .delivery-card-grid {
@@ -596,6 +634,7 @@
 }
 
 @media (max-width: 1024px) {
+  .delivery-alert-list,
   .delivery-card-grid,
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -625,6 +664,7 @@
     padding: 28px 16px 32px;
   }
 
+  .delivery-alert-list,
   .delivery-card-grid,
   .summary-grid,
   .detail-grid {
