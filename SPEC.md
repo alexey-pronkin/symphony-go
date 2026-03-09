@@ -405,6 +405,8 @@ Fields:
 - `throughput_window_days` (integer or string integer)
   - Default: `7`
   - Used by delivery metrics to compute recent throughput.
+- `delivery_trend_window` is not required as config; implementations may instead expose bounded
+  request-time windows for historical delivery analytics backed by the observability store.
 
 #### 5.3.3 `workspace` (object)
 
@@ -602,7 +604,7 @@ This section is intentionally redundant so a coding agent can implement the conf
 - `tracker.file`: path, optional extension for `tracker.kind=local`
 - `storage.postgres_dsn`: string or `$VAR`, optional extension for local Postgres storage
 - `storage.clickhouse_dsn`: string or `$VAR`, optional extension for ClickHouse-backed runtime
-  event retention and debug reads
+  event retention, debug reads, and historical delivery trend snapshots
 - `insights.scm_sources`: list of SCM source objects for delivery metrics
 - `insights.stale_branch_hours`: integer, default `72`
 - `insights.throughput_window_days`: integer, default `7`
@@ -1597,6 +1599,40 @@ Minimum endpoints:
         }
       },
       "warnings": ["scm metrics degraded: no SCM sources configured"]
+    }
+    ```
+
+- `GET /api/v1/insights/delivery/trends` (optional delivery-trend extension)
+  - Returns bounded historical delivery snapshots for compact dashboard trend rendering.
+  - Implementations should accept a small window selector such as `24h`, `7d`, `30d`, or `90d`
+    and a point limit.
+  - If historical analytics storage is unavailable, implementations should prefer returning an
+    empty or partial payload with warnings over failing the whole dashboard.
+  - Suggested response shape:
+
+    ```json
+    {
+      "generated_at": "2026-03-08T12:00:00Z",
+      "window": "7d",
+      "limit": 12,
+      "available": true,
+      "points": [
+        {
+          "captured_at": "2026-03-07T12:00:00Z",
+          "delivery_health": 77,
+          "flow_efficiency": 71,
+          "merge_readiness": 69,
+          "predictability": 73,
+          "active_tasks": 5,
+          "blocked_tasks": 1,
+          "done_last_window": 4,
+          "wip_count": 3,
+          "open_change_requests": 2,
+          "failing_change_checks": 0,
+          "warning_count": 0
+        }
+      ],
+      "warnings": []
     }
     ```
 

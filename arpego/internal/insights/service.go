@@ -2,6 +2,7 @@ package insights
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -23,10 +24,18 @@ type SCMInspector interface {
 	Inspect(context.Context, SourceConfig, time.Duration, time.Time) (SCMSourceMetrics, error)
 }
 
+type TrendStore interface {
+	AppendDeliverySnapshot(context.Context, DeliveryTrendPoint) error
+	ListDeliverySnapshots(context.Context, DeliveryTrendQuery, time.Time) ([]DeliveryTrendPoint, error)
+}
+
+var ErrInvalidTrendWindow = errors.New("invalid delivery trend window")
+
 type Service struct {
 	tasks            TaskProvider
 	runtime          RuntimeProvider
 	inspector        SCMInspector
+	trends           TrendStore
 	sources          []SourceConfig
 	now              func() time.Time
 	staleAfter       time.Duration
@@ -37,6 +46,7 @@ type Options struct {
 	Tasks            TaskProvider
 	Runtime          RuntimeProvider
 	Inspector        SCMInspector
+	Trends           TrendStore
 	Sources          []SourceConfig
 	Now              func() time.Time
 	StaleAfter       time.Duration
@@ -64,6 +74,7 @@ func NewService(opts Options) *Service {
 		tasks:            opts.Tasks,
 		runtime:          opts.Runtime,
 		inspector:        inspector,
+		trends:           opts.Trends,
 		sources:          append([]SourceConfig(nil), opts.Sources...),
 		now:              now,
 		staleAfter:       staleAfter,
@@ -92,6 +103,39 @@ func (s *Service) Delivery(ctx context.Context) (DeliveryReport, error) {
 	report.Warnings = append(report.Warnings, scmWarnings...)
 
 	report.Summary = buildSummary(report.Tracker, report.SCM)
+	if s.trends != nil {
+		if err := s.trends.AppendDeliverySnapshot(ctx, snapshotFromReport(report)); err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("delivery trend persistence degraded: %v", err))
+		}
+	}
+	return report, nil
+}
+
+func (s *Service) Trends(ctx context.Context, query DeliveryTrendQuery) (DeliveryTrendReport, error) {
+	now := s.now().UTC()
+	resolved, err := normalizeTrendQuery(query)
+	if err != nil {
+		return DeliveryTrendReport{}, err
+	}
+	report := DeliveryTrendReport{
+		GeneratedAt: now,
+		Window:      resolved.Window,
+		Limit:       resolved.Limit,
+		Available:   s.trends != nil,
+		Points:      []DeliveryTrendPoint{},
+		Warnings:    []string{},
+	}
+	if s.trends == nil {
+		report.Warnings = append(report.Warnings, "delivery trends degraded: historical analytics store is unavailable")
+		return report, nil
+	}
+	points, err := s.trends.ListDeliverySnapshots(ctx, resolved, now)
+	if err != nil {
+		report.Available = false
+		report.Warnings = append(report.Warnings, fmt.Sprintf("delivery trends degraded: %v", err))
+		return report, nil
+	}
+	report.Points = points
 	return report, nil
 }
 
@@ -366,6 +410,59 @@ func ratio(a, b int) float64 {
 
 func round2(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+func normalizeTrendQuery(query DeliveryTrendQuery) (DeliveryTrendQuery, error) {
+	window := strings.ToLower(strings.TrimSpace(query.Window))
+	if window == "" {
+		window = "7d"
+	}
+	switch window {
+	case "24h", "7d", "30d", "90d":
+	default:
+		return DeliveryTrendQuery{}, fmt.Errorf("%w: %s", ErrInvalidTrendWindow, query.Window)
+	}
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 48 {
+		limit = 48
+	}
+	return DeliveryTrendQuery{
+		Window: window,
+		Limit:  limit,
+	}, nil
+}
+
+func trendWindowDuration(window string) time.Duration {
+	switch window {
+	case "24h":
+		return 24 * time.Hour
+	case "30d":
+		return 30 * 24 * time.Hour
+	case "90d":
+		return 90 * 24 * time.Hour
+	default:
+		return 7 * 24 * time.Hour
+	}
+}
+
+func snapshotFromReport(report DeliveryReport) DeliveryTrendPoint {
+	return DeliveryTrendPoint{
+		CapturedAt:          report.GeneratedAt.UTC(),
+		DeliveryHealth:      report.Summary.DeliveryHealth.Score,
+		FlowEfficiency:      report.Summary.FlowEfficiency.Score,
+		MergeReadiness:      report.Summary.MergeReadiness.Score,
+		Predictability:      report.Summary.Predictability.Score,
+		ActiveTasks:         report.Tracker.ActiveTasks,
+		BlockedTasks:        report.Tracker.BlockedTasks,
+		DoneLastWindow:      report.Tracker.DoneLastWindow,
+		WIPCount:            report.Tracker.Kanban.WIPCount,
+		OpenChangeRequests:  report.SCM.Totals.OpenChangeRequests,
+		FailingChangeChecks: report.SCM.Totals.FailingChangeRequests,
+		WarningCount:        len(report.Warnings),
+	}
 }
 
 func clamp01(value float64) float64 {

@@ -32,6 +32,7 @@ type TaskPlatform interface {
 
 type DeliveryInsights interface {
 	Delivery(context.Context) (insights.DeliveryReport, error)
+	Trends(context.Context, insights.DeliveryTrendQuery) (insights.DeliveryTrendReport, error)
 }
 
 type Observability interface {
@@ -121,6 +122,12 @@ func handleAPI(
 			return
 		}
 		handleDeliveryInsights(delivery, w, r)
+	case r.URL.Path == "/api/v1/insights/delivery/trends":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		handleDeliveryTrends(delivery, w, r)
 	case r.URL.Path == "/api/v1/state":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -183,6 +190,39 @@ func handleDeliveryInsights(delivery DeliveryInsights, w http.ResponseWriter, r 
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": map[string]any{
 				"code":    "delivery_insights_failed",
+				"message": err.Error(),
+			},
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+func handleDeliveryTrends(delivery DeliveryInsights, w http.ResponseWriter, r *http.Request) {
+	if delivery == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": map[string]any{
+				"code":    "delivery_trends_unavailable",
+				"message": "delivery insights service is unavailable",
+			},
+		})
+		return
+	}
+	query := insights.DeliveryTrendQuery{
+		Window: strings.TrimSpace(r.URL.Query().Get("window")),
+		Limit:  parsePositiveInt(r.URL.Query().Get("limit")),
+	}
+	report, err := delivery.Trends(r.Context(), query)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := "delivery_trends_failed"
+		if errors.Is(err, insights.ErrInvalidTrendWindow) {
+			status = http.StatusBadRequest
+			code = "invalid_delivery_trend_window"
+		}
+		writeJSON(w, status, map[string]any{
+			"error": map[string]any{
+				"code":    code,
 				"message": err.Error(),
 			},
 		})
@@ -350,6 +390,17 @@ func hasExtension(path string) bool {
 
 func normalizeStateKey(state string) string {
 	return strings.ToLower(strings.TrimSpace(state))
+}
+
+func parsePositiveInt(value string) int {
+	if strings.TrimSpace(value) == "" {
+		return 0
+	}
+	var out int
+	if _, err := fmt.Sscanf(value, "%d", &out); err != nil || out <= 0 {
+		return 0
+	}
+	return out
 }
 
 func enrichIssueDetail(

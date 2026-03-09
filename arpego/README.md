@@ -53,6 +53,7 @@ When enabled through `server.port` or `--port`, the server binds to loopback and
 - `GET /api/v1/state`
 - `GET /api/v1/{issue_identifier}`
 - `GET /api/v1/insights/delivery`
+- `GET /api/v1/insights/delivery/trends`
 - `GET /api/v1/tasks`
 - `POST /api/v1/tasks`
 - `PATCH /api/v1/tasks/{issue_identifier}`
@@ -136,7 +137,8 @@ credentials.
 When `storage.clickhouse_dsn` is configured, Arpego also persists runtime
 events to ClickHouse and uses them to enrich `GET /api/v1/{issue_identifier}`
 with recent event history and session-log references beyond the in-memory
-runtime ring.
+runtime ring. The same ClickHouse DSN is also used for delivery trend
+snapshots consumed by `GET /api/v1/insights/delivery/trends`.
 
 ## Delivery Metrics
 
@@ -147,6 +149,7 @@ delivery dashboard with:
 - agile-oriented task signals: throughput, completion ratio, review load
 - kanban-oriented task signals: WIP, blocked ratio, aging work, flow load
 - SCM gitflow and review/CI signals grouped by configured source
+- historical trend cards from `GET /api/v1/insights/delivery/trends?window=7d&limit=12`
 
 SCM sources are configured under `insights.scm_sources` and can be labeled as
 `github`, `gitlab`, or `gitverse`. Sources may mix local `repo_path` inspection
@@ -188,6 +191,11 @@ server:
 ---
 Work on the selected Symphony task.
 ```
+
+Trend queries are intentionally bounded. Arpego currently accepts `window`
+values `24h`, `7d`, `30d`, and `90d`, plus a `limit` cap up to `48` points so
+the dashboard can stay compact even when the analytics store contains more raw
+snapshots.
 
 ## Dashboard Serving
 
