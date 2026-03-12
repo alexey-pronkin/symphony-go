@@ -4,12 +4,13 @@ import "fmt"
 
 // ValidationError categories per SPEC.md §11.4 and §6.3.
 const (
-	ErrUnsupportedTrackerKind    = "unsupported_tracker_kind"
-	ErrUnsupportedTrackerStorage = "unsupported_tracker_storage"
-	ErrMissingTrackerAPIKey      = "missing_tracker_api_key"
-	ErrMissingTrackerProjectSlug = "missing_tracker_project_slug"
-	ErrMissingPostgresDSN        = "missing_postgres_dsn"
-	ErrMissingCodexCommand       = "missing_codex_command"
+	ErrUnsupportedTrackerKind         = "unsupported_tracker_kind"
+	ErrUnsupportedTrackerStorage      = "unsupported_tracker_storage"
+	ErrUnsupportedRuntimeStateStorage = "unsupported_runtime_state_storage"
+	ErrMissingTrackerAPIKey           = "missing_tracker_api_key"
+	ErrMissingTrackerProjectSlug      = "missing_tracker_project_slug"
+	ErrMissingPostgresDSN             = "missing_postgres_dsn"
+	ErrMissingCodexCommand            = "missing_codex_command"
 )
 
 // ValidationError is a typed config validation failure.
@@ -59,6 +60,20 @@ func ValidateDispatch(c Config) error {
 			return &ValidationError{
 				Kind:    ErrMissingPostgresDSN,
 				Message: "storage.postgres_dsn or SYMPHONY_POSTGRES_DSN is required for tracker.storage=postgres",
+			}
+		}
+	}
+	if storage := c.StorageRuntimeState(); storage != "" {
+		if storage != "postgres" {
+			return &ValidationError{
+				Kind:    ErrUnsupportedRuntimeStateStorage,
+				Message: fmt.Sprintf("unsupported storage.runtime_state: %q (supported: postgres)", storage),
+			}
+		}
+		if c.StoragePostgresDSN() == "" {
+			return &ValidationError{
+				Kind:    ErrMissingPostgresDSN,
+				Message: "storage.postgres_dsn or SYMPHONY_POSTGRES_DSN is required for storage.runtime_state=postgres",
 			}
 		}
 	}

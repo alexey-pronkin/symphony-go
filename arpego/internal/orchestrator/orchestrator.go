@@ -28,27 +28,29 @@ type Runner interface {
 }
 
 type Options struct {
-	Config    config.Config
-	Workflow  *workflow.Definition
-	Logger    *slog.Logger
-	Tracker   Tracker
-	Events    tracker.RuntimeEventSink
-	Runner    Runner
-	Now       func() time.Time
-	AfterFunc func(time.Duration, func()) timerHandle
+	Config       config.Config
+	Workflow     *workflow.Definition
+	Logger       *slog.Logger
+	Tracker      Tracker
+	Events       tracker.RuntimeEventSink
+	Runner       Runner
+	RuntimeState RuntimeStateStore
+	Now          func() time.Time
+	AfterFunc    func(time.Duration, func()) timerHandle
 }
 
 type Orchestrator struct {
-	mu        sync.Mutex
-	cfg       config.Config
-	workflow  *workflow.Definition
-	logger    *slog.Logger
-	tracker   Tracker
-	events    tracker.RuntimeEventSink
-	runner    Runner
-	now       func() time.Time
-	afterFunc func(time.Duration, func()) timerHandle
-	state     State
+	mu           sync.Mutex
+	cfg          config.Config
+	workflow     *workflow.Definition
+	logger       *slog.Logger
+	tracker      Tracker
+	events       tracker.RuntimeEventSink
+	runner       Runner
+	runtimeState RuntimeStateStore
+	now          func() time.Time
+	afterFunc    func(time.Duration, func()) timerHandle
+	state        State
 
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -82,24 +84,31 @@ func New(opts Options) *Orchestrator {
 	}
 
 	orc := &Orchestrator{
-		cfg:       opts.Config,
-		workflow:  opts.Workflow,
-		logger:    logger,
-		tracker:   opts.Tracker,
-		events:    opts.Events,
-		runner:    opts.Runner,
-		now:       now,
-		afterFunc: afterFunc,
-		state:     newState(),
-		refreshCh: make(chan struct{}, 1),
-		retryCh:   make(chan string, 32),
-		resultsCh: make(chan workerResult, 32),
+		cfg:          opts.Config,
+		workflow:     opts.Workflow,
+		logger:       logger,
+		tracker:      opts.Tracker,
+		events:       opts.Events,
+		runner:       opts.Runner,
+		runtimeState: opts.RuntimeState,
+		now:          now,
+		afterFunc:    afterFunc,
+		state:        newState(),
+		refreshCh:    make(chan struct{}, 1),
+		retryCh:      make(chan string, 32),
+		resultsCh:    make(chan workerResult, 32),
 	}
 	if orc.tracker == nil {
 		orc.tracker = trackerAdapter{cfg: func() config.Config { return orc.cfg }}
 	}
 	if orc.runner == nil {
 		orc.runner = runnerAdapter{cfg: func() config.Config { return orc.cfg }}
+	}
+	if orc.runtimeState != nil {
+		orc.state.RuntimeState = RuntimeStateStatus{
+			Enabled: true,
+			Status:  "ok",
+		}
 	}
 	orc.applyConfigLocked(opts.Config)
 	return orc
@@ -112,6 +121,13 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		return nil
 	}
 	o.ctx, o.cancel = context.WithCancel(ctx)
+	if err := o.restoreRuntimeState(o.ctx); err != nil {
+		o.cancel()
+		o.cancel = nil
+		o.ctx = nil
+		o.mu.Unlock()
+		return fmt.Errorf("restore runtime state: %w", err)
+	}
 	o.ticker = time.NewTicker(time.Duration(o.state.PollIntervalMs) * time.Millisecond)
 	o.mu.Unlock()
 
@@ -242,6 +258,8 @@ func (o *Orchestrator) dispatchIssue(ctx context.Context, issue tracker.Issue, a
 	o.state.Running[issue.ID] = entry
 	o.state.Claimed[issue.ID] = struct{}{}
 	delete(o.state.RetryAttempts, issue.ID)
+	o.deleteRetryLocked(issue.ID)
+	o.persistRunningLocked(entry)
 	ilog.WithIssue(o.logger, issue.ID, issue.Identifier).Info("dispatch outcome=started", "attempt", attempt)
 
 	o.wg.Add(1)
@@ -279,6 +297,7 @@ func (o *Orchestrator) handleWorkerResult(result workerResult) {
 	}
 
 	delete(o.state.Running, result.IssueID)
+	o.deleteRunningLocked(result.IssueID)
 	if result.Err == nil && result.Result.Usage.TotalTokens > entry.CurrentUsage.TotalTokens {
 		entry.CurrentUsage = result.Result.Usage
 	}
@@ -320,6 +339,7 @@ func (o *Orchestrator) recordSession(issue tracker.Issue, started agent.SessionS
 	entry.SessionID = started.ThreadID + "-" + started.TurnID
 	entry.SessionLog = started.LogPath
 	entry.TurnCount++
+	o.persistRunningLocked(entry)
 	ilog.WithSession(ilog.WithIssue(o.logger, issue.ID, issue.Identifier), entry.SessionID).Info("session outcome=started")
 	runtimeEvent := tracker.RuntimeEvent{
 		IssueID:    issue.ID,
@@ -372,6 +392,7 @@ func (o *Orchestrator) recordEvent(issueID string, event agent.Event) {
 	if limits := extractRateLimits(event.Payload); limits != nil {
 		o.state.CodexRateLimits = limits
 	}
+	o.persistRunningLocked(entry)
 	runtimeEvent := tracker.RuntimeEvent{
 		IssueID:     entry.Issue.ID,
 		Identifier:  entry.Issue.Identifier,
