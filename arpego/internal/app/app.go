@@ -55,12 +55,18 @@ func RunArgs(args []string) error {
 		return err
 	}
 	defer closeQuietly(observability)
+	runtimeState, runtimeStateCloser, err := buildRuntimeStateStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(runtimeStateCloser)
 	orc := orchestrator.New(orchestrator.Options{
-		Config:   cfg,
-		Workflow: def,
-		Logger:   logger,
-		Tracker:  trackerClient,
-		Events:   observability.runtimeEvents,
+		Config:       cfg,
+		Workflow:     def,
+		Logger:       logger,
+		Tracker:      trackerClient,
+		Events:       observability.runtimeEvents,
+		RuntimeState: runtimeState,
 	})
 	if err := orc.Start(ctx); err != nil {
 		return err
@@ -261,6 +267,24 @@ func buildObservabilityServices(
 			trendStore,
 		},
 	}, nil
+}
+
+func buildRuntimeStateStore(
+	ctx context.Context,
+	cfg config.Config,
+) (orchestrator.RuntimeStateStore, io.Closer, error) {
+	if cfg.StorageRuntimeState() != "postgres" {
+		return nil, nil, nil
+	}
+	store, err := orchestrator.OpenPostgresRuntimeStateStore(
+		ctx,
+		cfg.StoragePostgresDSN(),
+		cfg.TrackerProjectSlug(),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open postgres runtime state: %w", err)
+	}
+	return store, store, nil
 }
 
 type observabilityServices struct {

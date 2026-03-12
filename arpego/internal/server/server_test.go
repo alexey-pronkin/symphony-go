@@ -35,6 +35,11 @@ func TestStateEndpointReturnsSummary(t *testing.T) {
 				Attempt:         2,
 			}},
 			CodexTotals: orchestrator.SnapshotTotals{TotalTokens: 23},
+			RuntimeState: &orchestrator.RuntimeStateStatus{
+				Enabled:   true,
+				Status:    "degraded",
+				LastError: strPtr("runtime state degraded"),
+			},
 		},
 	}
 
@@ -57,6 +62,10 @@ func TestStateEndpointReturnsSummary(t *testing.T) {
 	if len(running) != 1 {
 		t.Fatalf("running len = %d", len(running))
 	}
+	runtimeState := payload["runtime_state"].(map[string]any)
+	if runtimeState["status"] != "degraded" {
+		t.Fatalf("runtime_state = %#v", runtimeState)
+	}
 }
 
 func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
@@ -71,6 +80,10 @@ func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
 					SessionID: "thread-1-turn-1",
 					Tokens:    orchestrator.RunningStatus{}.Tokens,
 				},
+				RuntimeState: &orchestrator.RuntimeStateStatus{
+					Enabled: true,
+					Status:  "ok",
+				},
 			},
 		},
 	}
@@ -80,6 +93,13 @@ func TestIssueEndpointReturnsDetailOr404(t *testing.T) {
 	NewHandler(runtime, nil, nil, nil, nil, "").ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("known status = %d want 200", rec.Code)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("Unmarshal detail: %v", err)
+	}
+	if detail["runtime_state"].(map[string]any)["status"] != "ok" {
+		t.Fatalf("detail runtime_state = %#v", detail["runtime_state"])
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/MT-999", nil)
@@ -515,6 +535,10 @@ func (f fakeObservability) ListRuntimeEvents(
 func (f *fakeWorkspaceScanner) ScanWorkspace(_ context.Context, path string) orchestrator.WorkspaceScan {
 	f.lastPath = path
 	return f.result
+}
+
+func strPtr(value string) *string {
+	return &value
 }
 
 func (f *fakeTaskPlatform) ListTasks(context.Context) ([]tracker.Issue, error) {

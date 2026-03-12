@@ -192,6 +192,10 @@ func (c Config) StorageClickHouseDSN() string {
 	return resolveVar(raw)
 }
 
+func (c Config) StorageRuntimeState() string {
+	return strings.ToLower(strings.TrimSpace(getString(c.section("storage"), "runtime_state", "")))
+}
+
 // --- security (extension) ---
 
 func (c Config) SecurityWorkspaceScanEnabled() bool {
