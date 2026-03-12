@@ -74,6 +74,7 @@ Arpego now supports a built-in local task platform with:
 - optional `tracker.file` task-store path
 - optional `storage.postgres_dsn` or `SYMPHONY_POSTGRES_DSN` for Postgres-backed local storage
 - optional `storage.clickhouse_dsn` or `SYMPHONY_CLICKHOUSE_DSN` for persisted runtime-event history
+- optional `storage.runtime_state: postgres` for persisted retry/running runtime state
 - task CRUD APIs under `/api/v1/tasks`
 - a Libretto UI that can create and move tasks while still showing runtime state
 
@@ -83,6 +84,11 @@ to the selected `WORKFLOW.md`.
 If `tracker.storage` is omitted in local mode, Arpego uses the file-backed
 adapter. When `tracker.storage: postgres` is selected, Arpego uses the
 transactional Postgres adapter implemented with GORM.
+
+When `storage.runtime_state: postgres` is selected, Arpego also persists retry
+queue entries and running-session metadata in Postgres, restores them on
+startup before the first tick, and exposes runtime-state durability via the
+`runtime_state` object on `/api/v1/state` and `/api/v1/{issue_identifier}`.
 
 Minimal local example:
 

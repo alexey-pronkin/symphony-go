@@ -12,12 +12,16 @@ type timerHandle interface {
 }
 
 type RetryEntry struct {
-	IssueID    string
-	Identifier string
-	Attempt    int
-	DueAt      time.Time
-	Timer      timerHandle
-	Error      string
+	IssueID       string
+	Identifier    string
+	Attempt       int
+	DueAt         time.Time
+	Timer         timerHandle
+	Error         string
+	Continuation  bool
+	RestartCount  int
+	RetryAttempt  int
+	WorkspacePath string
 }
 
 type RunningEntry struct {
@@ -61,6 +65,7 @@ type State struct {
 	Completed           map[string]struct{}
 	CodexTotals         CodexTotals
 	CodexRateLimits     map[string]any
+	RuntimeState        RuntimeStateStatus
 }
 
 func newState() State {

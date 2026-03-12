@@ -383,6 +383,11 @@ Fields:
   - Optional runtime-event and observability store extension.
   - Implementations may also support a canonical environment variable such as
     `SYMPHONY_CLICKHOUSE_DSN`.
+- `runtime_state` (string, optional extension)
+  - Optional durable runtime-state adapter selector for retry queue and
+    running-session metadata persistence.
+  - Suggested values: `postgres`
+  - When `postgres` is selected, implementations may reuse `postgres_dsn`.
 
 #### 5.3.8 `insights` (object, optional extension)
 
@@ -1501,7 +1506,12 @@ Minimum endpoints:
         "total_tokens": 7400,
         "seconds_running": 1834.2
       },
-      "rate_limits": null
+      "rate_limits": null,
+      "runtime_state": {
+        "enabled": true,
+        "status": "ok",
+        "last_error": null
+      }
     }
     ```
 
@@ -1517,6 +1527,11 @@ Minimum endpoints:
       "status": "running",
       "workspace": {
         "path": "/tmp/symphony_workspaces/MT-649"
+      },
+      "runtime_state": {
+        "enabled": true,
+        "status": "degraded",
+        "last_error": "runtime state persistence temporarily unavailable"
       },
       "workspace_scan": {
         "status": "findings",
@@ -2291,7 +2306,6 @@ Use the same validation profiles as Section 17:
   exposes the baseline endpoints/error semantics in Section 13.7 if shipped.
 - Optional `linear_graphql` client-side tool extension exposes raw Linear GraphQL access through the
   app-server session using configured Symphony auth.
-- TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
 - TODO: Add first-class tracker write APIs (comments/state transitions) in the orchestrator instead

@@ -8,12 +8,13 @@ import (
 )
 
 type Snapshot struct {
-	GeneratedAt time.Time       `json:"generated_at"`
-	Counts      SnapshotCounts  `json:"counts"`
-	Running     []RunningStatus `json:"running"`
-	Retrying    []RetryStatus   `json:"retrying"`
-	CodexTotals SnapshotTotals  `json:"codex_totals"`
-	RateLimits  map[string]any  `json:"rate_limits"`
+	GeneratedAt  time.Time           `json:"generated_at"`
+	Counts       SnapshotCounts      `json:"counts"`
+	Running      []RunningStatus     `json:"running"`
+	Retrying     []RetryStatus       `json:"retrying"`
+	CodexTotals  SnapshotTotals      `json:"codex_totals"`
+	RateLimits   map[string]any      `json:"rate_limits"`
+	RuntimeState *RuntimeStateStatus `json:"runtime_state,omitempty"`
 }
 
 type SnapshotCounts struct {
@@ -50,18 +51,19 @@ type RetryStatus struct {
 }
 
 type IssueDetail struct {
-	IssueIdentifier string         `json:"issue_identifier"`
-	IssueID         string         `json:"issue_id"`
-	Status          string         `json:"status"`
-	Workspace       WorkspaceInfo  `json:"workspace"`
-	WorkspaceScan   *WorkspaceScan `json:"workspace_scan,omitempty"`
-	Attempts        AttemptInfo    `json:"attempts"`
-	Running         *RunningStatus `json:"running"`
-	Retry           *RetryStatus   `json:"retry"`
-	Logs            IssueLogs      `json:"logs"`
-	RecentEvents    []IssueEvent   `json:"recent_events"`
-	LastError       *string        `json:"last_error"`
-	Tracked         map[string]any `json:"tracked"`
+	IssueIdentifier string              `json:"issue_identifier"`
+	IssueID         string              `json:"issue_id"`
+	Status          string              `json:"status"`
+	Workspace       WorkspaceInfo       `json:"workspace"`
+	WorkspaceScan   *WorkspaceScan      `json:"workspace_scan,omitempty"`
+	Attempts        AttemptInfo         `json:"attempts"`
+	Running         *RunningStatus      `json:"running"`
+	Retry           *RetryStatus        `json:"retry"`
+	Logs            IssueLogs           `json:"logs"`
+	RecentEvents    []IssueEvent        `json:"recent_events"`
+	LastError       *string             `json:"last_error"`
+	Tracked         map[string]any      `json:"tracked"`
+	RuntimeState    *RuntimeStateStatus `json:"runtime_state,omitempty"`
 }
 
 type WorkspaceInfo struct {
@@ -129,6 +131,7 @@ func (o *Orchestrator) Snapshot() Snapshot {
 			TotalTokens:    o.state.CodexTotals.TotalTokens,
 			SecondsRunning: float64(o.state.CodexTotals.SecondsRunning),
 		},
+		RuntimeState: o.state.RuntimeState.clone(),
 	}
 
 	for _, entry := range o.state.Running {
@@ -210,6 +213,7 @@ func (o *Orchestrator) Issue(identifier string) (IssueDetail, bool) {
 				"thread_id": entry.ThreadID,
 				"turn_id":   entry.TurnID,
 			},
+			RuntimeState: o.state.RuntimeState.clone(),
 		}, true
 	}
 	for _, retry := range o.state.RetryAttempts {
@@ -237,6 +241,7 @@ func (o *Orchestrator) Issue(identifier string) (IssueDetail, bool) {
 			RecentEvents: nil,
 			LastError:    stringPtrOrNil(retry.Error),
 			Tracked:      map[string]any{},
+			RuntimeState: o.state.RuntimeState.clone(),
 		}, true
 	}
 	return IssueDetail{}, false
