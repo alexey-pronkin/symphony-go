@@ -368,10 +368,11 @@ func TestWorkerAccountingTracksSessionIDTokensAndRuntime(t *testing.T) {
 }
 
 type testDeps struct {
-	cfg     config.Config
-	tracker *fakeTracker
-	events  *fakeRuntimeEventSink
-	now     func() time.Time
+	cfg          config.Config
+	tracker      *fakeTracker
+	events       *fakeRuntimeEventSink
+	now          func() time.Time
+	runtimeState RuntimeStateStore
 }
 
 func testOrchestrator(t *testing.T, deps testDeps) *Orchestrator {
@@ -379,11 +380,12 @@ func testOrchestrator(t *testing.T, deps testDeps) *Orchestrator {
 	var sink bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&sink, nil))
 	orc := New(Options{
-		Config:  deps.cfg,
-		Logger:  logger,
-		Tracker: deps.tracker,
-		Events:  deps.events,
-		Now:     deps.now,
+		Config:       deps.cfg,
+		Logger:       logger,
+		Tracker:      deps.tracker,
+		Events:       deps.events,
+		RuntimeState: deps.runtimeState,
+		Now:          deps.now,
 		AfterFunc: func(time.Duration, func()) timerHandle {
 			return noopTimer{}
 		},

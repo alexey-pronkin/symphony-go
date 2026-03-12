@@ -34,6 +34,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 	for issueID, entry := range o.state.Running {
 		if o.stalled(now, entry) {
 			delete(o.state.Running, issueID)
+			o.deleteRunningLocked(issueID)
 			o.finishRuntime(entry, now)
 			if entry.cancel != nil {
 				entry.cancel()
@@ -73,6 +74,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 		switch {
 		case terminalStates[stateName]:
 			delete(o.state.Running, issueID)
+			o.deleteRunningLocked(issueID)
 			o.finishRuntime(entry, o.now())
 			if entry.cancel != nil {
 				entry.cancel()
@@ -84,6 +86,7 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) {
 			entry.Issue = issue
 		default:
 			delete(o.state.Running, issueID)
+			o.deleteRunningLocked(issueID)
 			o.finishRuntime(entry, o.now())
 			if entry.cancel != nil {
 				entry.cancel()

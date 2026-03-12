@@ -38,23 +38,22 @@ func (o *Orchestrator) scheduleRetry(issue tracker.Issue, attempt int, continuat
 	}
 	delay := retryDelay(attempt, continuation, time.Duration(o.cfg.MaxRetryBackoffMs())*time.Millisecond)
 	retry := RetryEntry{
-		IssueID:    issue.ID,
-		Identifier: issue.Identifier,
-		Attempt:    attempt,
-		DueAt:      o.now().Add(delay),
-		Error:      reason,
+		IssueID:       issue.ID,
+		Identifier:    issue.Identifier,
+		Attempt:       attempt,
+		DueAt:         o.now().Add(delay),
+		Error:         reason,
+		Continuation:  continuation,
+		RestartCount:  attempt,
+		RetryAttempt:  attempt,
+		WorkspacePath: issueWorkspacePath(o.cfg.WorkspaceRoot(), issue.Identifier),
 	}
 	if current, ok := o.state.RetryAttempts[issue.ID]; ok && current.Timer != nil {
 		current.Timer.Stop()
 	}
-	retry.Timer = o.afterFunc(delay, func() {
-		select {
-		case o.retryCh <- issue.ID:
-		default:
-			go func() { o.retryCh <- issue.ID }()
-		}
-	})
+	o.installRetryTimerLocked(&retry)
 	o.state.RetryAttempts[issue.ID] = retry
+	o.persistRetryLocked(retry)
 	logging.WithIssue(o.logger, issue.ID, issue.Identifier).Warn(
 		"retry outcome=queued",
 		"attempt", attempt,
@@ -68,6 +67,7 @@ func (o *Orchestrator) handleRetry(ctx context.Context, issueID string) {
 	retry, ok := o.state.RetryAttempts[issueID]
 	if ok {
 		delete(o.state.RetryAttempts, issueID)
+		o.deleteRetryLocked(issueID)
 	}
 	o.mu.Unlock()
 	if !ok {
