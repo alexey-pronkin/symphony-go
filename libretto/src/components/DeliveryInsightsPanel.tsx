@@ -5,6 +5,7 @@ import {
   countDeliveryRollupAlerts,
   deliveryObservabilityState,
   findDeliveryFocusedSource,
+  prioritizeDeliverySources,
   resolveDeliverySourceFocus,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
@@ -65,6 +66,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   const status = deliveryObservabilityState(report, error)
   const resolvedFocusedSourceKey = resolveDeliverySourceFocus(focusedSourceKey, report.scm.sources)
   const focusedSource = findDeliveryFocusedSource(resolvedFocusedSourceKey, report.scm.sources)
+  const orderedSources = prioritizeDeliverySources(report.scm.sources, resolvedFocusedSourceKey)
 
   return (
     <section className={`panel delivery-panel delivery-panel-${status}`}>
@@ -241,7 +243,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
             </button>
           </div>
         ) : null}
-        {report.scm.sources.map((source) => (
+        {orderedSources.map((source) => (
           <article
             className={`delivery-source${deliverySourceKey(source) === resolvedFocusedSourceKey ? ' delivery-source-focused' : ''}`}
             key={`${source.kind}-${source.name}-${source.repo_path}`}

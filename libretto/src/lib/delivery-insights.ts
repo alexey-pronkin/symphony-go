@@ -55,6 +55,22 @@ export function findDeliveryFocusedSource(
   return sources.find((source) => deliverySourceKey(source) === focusedSourceKey) ?? null
 }
 
+export function prioritizeDeliverySources(
+  sources: DeliveryInsights['scm']['sources'],
+  focusedSourceKey: string | null
+): DeliveryInsights['scm']['sources'] {
+  if (!focusedSourceKey) {
+    return sources
+  }
+
+  const focusedIndex = sources.findIndex((source) => deliverySourceKey(source) === focusedSourceKey)
+  if (focusedIndex <= 0) {
+    return sources
+  }
+
+  return [sources[focusedIndex], ...sources.slice(0, focusedIndex), ...sources.slice(focusedIndex + 1)]
+}
+
 export function orderedDeliveryCards(report: DeliveryInsights): DeliveryMetricCard[] {
   return [report.summary.delivery_health, report.summary.flow_efficiency, report.summary.merge_readiness, report.summary.predictability]
 }

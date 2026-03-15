@@ -37,6 +37,7 @@ Libretto now provides a Symphony operator dashboard for:
 - source-backed delivery alerts can now focus the related SCM source card directly
 - source focus can now be cleared or toggled directly from the delivery panel
 - the focused source notice now summarizes repository identity and key risk counts
+- focused SCM sources now move to the top of the source list during investigation
 
 ## API Configuration
 
