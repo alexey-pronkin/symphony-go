@@ -4,6 +4,7 @@ import {
   buildDeliveryRollupAlerts,
   countDeliveryRollupAlerts,
   deliveryObservabilityState,
+  findDeliveryFocusedSource,
   resolveDeliverySourceFocus,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
@@ -111,6 +112,13 @@ test('resolveDeliverySourceFocus returns null when the focused source is no long
   const key = deliverySourceKey(report.scm.sources[0])
   assert.equal(resolveDeliverySourceFocus(key, report.scm.sources), key)
   assert.equal(resolveDeliverySourceFocus(key, []), null)
+})
+
+test('findDeliveryFocusedSource returns the current focused source record', () => {
+  const report = sampleReport()
+  const key = deliverySourceKey(report.scm.sources[0])
+  assert.equal(findDeliveryFocusedSource(key, report.scm.sources)?.name, report.scm.sources[0].name)
+  assert.equal(findDeliveryFocusedSource('missing', report.scm.sources), null)
 })
 
 function sampleReport(): DeliveryInsights {

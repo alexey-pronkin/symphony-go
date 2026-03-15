@@ -45,6 +45,16 @@ export function resolveDeliverySourceFocus(
   return focusedSourceKey && sources.some((source) => deliverySourceKey(source) === focusedSourceKey) ? focusedSourceKey : null
 }
 
+export function findDeliveryFocusedSource(
+  focusedSourceKey: string | null,
+  sources: DeliveryInsights['scm']['sources']
+): DeliveryInsights['scm']['sources'][number] | null {
+  if (!focusedSourceKey) {
+    return null
+  }
+  return sources.find((source) => deliverySourceKey(source) === focusedSourceKey) ?? null
+}
+
 export function orderedDeliveryCards(report: DeliveryInsights): DeliveryMetricCard[] {
   return [report.summary.delivery_health, report.summary.flow_efficiency, report.summary.merge_readiness, report.summary.predictability]
 }
