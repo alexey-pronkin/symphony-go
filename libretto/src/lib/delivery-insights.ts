@@ -34,6 +34,17 @@ export function countDeliveryRollupAlerts(alerts: DeliveryRollupAlert[]): Delive
   )
 }
 
+export function toggleDeliverySourceFocus(currentFocusedSourceKey: string | null, requestedSourceKey: string): string | null {
+  return currentFocusedSourceKey === requestedSourceKey ? null : requestedSourceKey
+}
+
+export function resolveDeliverySourceFocus(
+  focusedSourceKey: string | null,
+  sources: Array<Pick<DeliveryInsights['scm']['sources'][number], 'kind' | 'name' | 'repo_path'>>
+): string | null {
+  return focusedSourceKey && sources.some((source) => deliverySourceKey(source) === focusedSourceKey) ? focusedSourceKey : null
+}
+
 export function orderedDeliveryCards(report: DeliveryInsights): DeliveryMetricCard[] {
   return [report.summary.delivery_health, report.summary.flow_efficiency, report.summary.merge_readiness, report.summary.predictability]
 }
