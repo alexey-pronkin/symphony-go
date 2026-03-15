@@ -4,6 +4,7 @@ import {
   buildDeliveryRollupAlerts,
   countDeliveryRollupAlerts,
   deliveryObservabilityState,
+  findDeliveryFocusedSource,
   resolveDeliverySourceFocus,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
@@ -63,6 +64,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   const alerts = filterDeliveryRollupAlerts(allAlerts, alertSeverityFilter)
   const status = deliveryObservabilityState(report, error)
   const resolvedFocusedSourceKey = resolveDeliverySourceFocus(focusedSourceKey, report.scm.sources)
+  const focusedSource = findDeliveryFocusedSource(resolvedFocusedSourceKey, report.scm.sources)
 
   return (
     <section className={`panel delivery-panel delivery-panel-${status}`}>
@@ -220,9 +222,20 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
       </div>
 
       <div className="delivery-source-list">
-        {resolvedFocusedSourceKey ? (
+        {focusedSource ? (
           <div className="delivery-focus-note">
-            <p>Focused source selected from delivery alerts.</p>
+            <div className="delivery-focus-note-copy">
+              <p className="delivery-focus-note-label">Focused source</p>
+              <strong>
+                {focusedSource.name} · {focusedSource.kind} · {focusedSource.main_branch}
+              </strong>
+              <p>{focusedSource.repo_path}</p>
+              <div className="delivery-focus-note-metrics">
+                <span>{focusedSource.merge_readiness} readiness</span>
+                <span>{focusedSource.failing_change_requests} failing</span>
+                <span>{focusedSource.stale_change_requests} stale</span>
+              </div>
+            </div>
             <button type="button" className="ghost-button" onClick={() => setFocusedSourceKey(null)}>
               Clear focus
             </button>
