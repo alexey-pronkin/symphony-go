@@ -4,10 +4,12 @@ import {
   buildDeliveryRollupAlerts,
   countDeliveryRollupAlerts,
   deliveryObservabilityState,
+  resolveDeliverySourceFocus,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
   hasDeliveryWarnings,
   orderedDeliveryCards,
+  toggleDeliverySourceFocus,
 } from './delivery-insights.ts'
 import type { DeliveryInsights } from './api.ts'
 
@@ -96,6 +98,19 @@ test('buildDeliveryRollupAlerts tags source-backed alerts with source keys', () 
   const alerts = buildDeliveryRollupAlerts(report)
   const sourceAlert = alerts.find((alert) => alert.sourceKey)
   assert.equal(sourceAlert?.sourceKey, deliverySourceKey(report.scm.sources[0]))
+})
+
+test('toggleDeliverySourceFocus clears focus when the same source is selected twice', () => {
+  const key = deliverySourceKey(sampleReport().scm.sources[0])
+  assert.equal(toggleDeliverySourceFocus(null, key), key)
+  assert.equal(toggleDeliverySourceFocus(key, key), null)
+})
+
+test('resolveDeliverySourceFocus returns null when the focused source is no longer present', () => {
+  const report = sampleReport()
+  const key = deliverySourceKey(report.scm.sources[0])
+  assert.equal(resolveDeliverySourceFocus(key, report.scm.sources), key)
+  assert.equal(resolveDeliverySourceFocus(key, []), null)
 })
 
 function sampleReport(): DeliveryInsights {

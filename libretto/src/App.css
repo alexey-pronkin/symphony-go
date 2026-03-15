@@ -262,6 +262,21 @@
   border: 1px solid rgba(247, 162, 96, 0.28);
 }
 
+.delivery-focus-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 211, 255, 0.22);
+  background: rgba(12, 28, 38, 0.72);
+}
+
+.delivery-focus-note p {
+  margin: 0;
+}
+
 .delivery-breakdown-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
