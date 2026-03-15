@@ -5,6 +5,7 @@ import {
   countDeliveryRollupAlerts,
   deliveryObservabilityState,
   findDeliveryFocusedSource,
+  prioritizeDeliverySources,
   resolveDeliverySourceFocus,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
@@ -121,6 +122,24 @@ test('findDeliveryFocusedSource returns the current focused source record', () =
   assert.equal(findDeliveryFocusedSource('missing', report.scm.sources), null)
 })
 
+test('prioritizeDeliverySources moves the focused source to the front and keeps other order stable', () => {
+  const report = sampleReportWithMultipleSources()
+  const focusedKey = deliverySourceKey(report.scm.sources[1])
+  const prioritized = prioritizeDeliverySources(report.scm.sources, focusedKey)
+  assert.deepEqual(
+    prioritized.map((source) => source.name),
+    ['api', 'platform', 'worker']
+  )
+})
+
+test('prioritizeDeliverySources keeps the original order when no focus is active', () => {
+  const report = sampleReportWithMultipleSources()
+  assert.deepEqual(
+    prioritizeDeliverySources(report.scm.sources, null).map((source) => source.name),
+    report.scm.sources.map((source) => source.name)
+  )
+})
+
 function sampleReport(): DeliveryInsights {
   return {
     generated_at: '2026-03-07T12:00:00Z',
@@ -215,5 +234,37 @@ function sampleReport(): DeliveryInsights {
       ],
     },
     warnings: ['scm metrics degraded'],
+  }
+}
+
+function sampleReportWithMultipleSources(): DeliveryInsights {
+  const report = sampleReport()
+  return {
+    ...report,
+    scm: {
+      ...report.scm,
+      active_sources: 3,
+      sources: [
+        report.scm.sources[0],
+        {
+          ...report.scm.sources[0],
+          name: 'api',
+          repo_path: '/tmp/api',
+          merge_readiness: 82,
+          stale_change_requests: 0,
+          failing_change_requests: 0,
+          warnings: [],
+        },
+        {
+          ...report.scm.sources[0],
+          name: 'worker',
+          repo_path: '/tmp/worker',
+          merge_readiness: 61,
+          stale_change_requests: 2,
+          failing_change_requests: 0,
+          warnings: ['stale pipeline data'],
+        },
+      ],
+    },
   }
 }
