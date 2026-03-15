@@ -4,10 +4,12 @@ import {
   buildDeliveryRollupAlerts,
   countDeliveryRollupAlerts,
   deliveryObservabilityState,
+  resolveDeliverySourceFocus,
   filterDeliveryRollupAlerts,
   deliverySourceKey,
   hasDeliveryWarnings,
   orderedDeliveryCards,
+  toggleDeliverySourceFocus,
 } from '../lib/delivery-insights'
 
 type DeliveryInsightsPanelProps = {
@@ -60,8 +62,7 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
   const alertCounts = countDeliveryRollupAlerts(allAlerts)
   const alerts = filterDeliveryRollupAlerts(allAlerts, alertSeverityFilter)
   const status = deliveryObservabilityState(report, error)
-  const resolvedFocusedSourceKey =
-    focusedSourceKey && report.scm.sources.some((source) => deliverySourceKey(source) === focusedSourceKey) ? focusedSourceKey : null
+  const resolvedFocusedSourceKey = resolveDeliverySourceFocus(focusedSourceKey, report.scm.sources)
 
   return (
     <section className={`panel delivery-panel delivery-panel-${status}`}>
@@ -108,8 +109,12 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
               </div>
               <p>{alert.detail}</p>
               {alert.sourceKey ? (
-                <button type="button" className="ghost-button" onClick={() => setFocusedSourceKey(alert.sourceKey ?? null)}>
-                  Focus source
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setFocusedSourceKey(toggleDeliverySourceFocus(resolvedFocusedSourceKey, alert.sourceKey ?? ''))}
+                >
+                  {resolvedFocusedSourceKey === alert.sourceKey ? 'Clear focus' : 'Focus source'}
                 </button>
               ) : null}
             </article>
@@ -215,7 +220,14 @@ export function DeliveryInsightsPanel({ report, trends, loading, trendsLoading, 
       </div>
 
       <div className="delivery-source-list">
-        {resolvedFocusedSourceKey ? <p className="delivery-focus-note">Focused source selected from delivery alerts.</p> : null}
+        {resolvedFocusedSourceKey ? (
+          <div className="delivery-focus-note">
+            <p>Focused source selected from delivery alerts.</p>
+            <button type="button" className="ghost-button" onClick={() => setFocusedSourceKey(null)}>
+              Clear focus
+            </button>
+          </div>
+        ) : null}
         {report.scm.sources.map((source) => (
           <article
             className={`delivery-source${deliverySourceKey(source) === resolvedFocusedSourceKey ? ' delivery-source-focused' : ''}`}
