@@ -48,7 +48,7 @@ func (s *Session) Start(ctx context.Context, params StartParams) (SessionStarted
 		"cwd":            params.WorkspacePath,
 		"approvalPolicy": approvalPolicy(s.cfg),
 		"sandbox":        emptyToNil(s.cfg.CodexThreadSandbox()),
-		"dynamicTools":   []any{},
+		"dynamicTools":   buildDynamicTools(s.cfg),
 	}}); err != nil {
 		return SessionStarted{}, err
 	}
@@ -147,19 +147,20 @@ func (s *Session) Run(ctx context.Context, onEvent func(Event)) (RunResult, erro
 			}
 			return RunResult{}, &RunError{Kind: ErrApprovalRequired, Message: "approval required"}
 		case "item/tool/call":
-			if err := s.handleToolCall(msg); err != nil {
+			if err := s.handleToolCall(deadlineCtx, msg); err != nil {
 				return RunResult{}, err
 			}
 		}
 	}
 }
 
-func (s *Session) handleToolCall(msg Response) error {
-	result := map[string]any{"success": false, "error": ErrUnsupportedToolCall}
-	if err := s.client.Send(map[string]any{"id": msg.ID, "result": result}); err != nil {
-		return err
+func (s *Session) handleToolCall(ctx context.Context, msg Response) error {
+	tool, _ := msg.Params["tool"].(string)
+	if tool == linearGraphQLToolName {
+		return s.handleLinearGraphQL(ctx, msg)
 	}
-	return nil
+	result := map[string]any{"success": false, "error": ErrUnsupportedToolCall}
+	return s.client.Send(map[string]any{"id": msg.ID, "result": result})
 }
 
 func approvalPolicy(cfg config.Config) any {
