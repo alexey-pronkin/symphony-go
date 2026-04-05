@@ -229,6 +229,7 @@ func TestHasMultipleOperations(t *testing.T) {
 		{"mutationResult field is not keyword", "mutation Foo { mutationResult { id } }", false},
 		{"query alias is not extra operation", "query Viewer { query: viewer { id } }", false},
 		{"mutation field is not extra operation", "query Viewer { mutation }", false},
+		{"introspection sibling queryType field", "query { __schema { mutationType { name } queryType { name } } }", false},
 		{"fragment only", "fragment ViewerFields on Viewer { id }", false},
 		{"comment only", "# just a comment\n# still no operation", false},
 		{"empty string", "", false},
