@@ -15,17 +15,30 @@ jobs:
   repo-scan:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Trivy CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.69.3"
+          archive="trivy_${version}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${version}"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "$base_url/$archive"
+          curl -fsSL -o "$RUNNER_TEMP/trivy-checksums.txt" "$base_url/trivy_${version}_checksums.txt"
+          checksum=$(awk '/  '"$archive"'$/ { print $1 }' "$RUNNER_TEMP/trivy-checksums.txt")
+          test -n "$checksum"
+          echo "$checksum  $RUNNER_TEMP/$archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/trivy-bin" trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+
       - name: Trivy repo scan
         id: repo_scan
         shell: bash
         run: |
           set +e
-          docker run --rm \
-            -v "${PWD}:/work" \
-            -w /work \
-            aquasec/trivy:0.65.0 \
-            fs \
+          trivy fs \
             --config trivy.yaml \
             --format sarif \
             --output trivy-repo.sarif \
@@ -48,17 +61,30 @@ jobs:
   config-scan:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Trivy CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.69.3"
+          archive="trivy_${version}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${version}"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "$base_url/$archive"
+          curl -fsSL -o "$RUNNER_TEMP/trivy-checksums.txt" "$base_url/trivy_${version}_checksums.txt"
+          checksum=$(awk '/  '"$archive"'$/ { print $1 }' "$RUNNER_TEMP/trivy-checksums.txt")
+          test -n "$checksum"
+          echo "$checksum  $RUNNER_TEMP/$archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/trivy-bin" trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+
       - name: Trivy config scan
         id: config_scan
         shell: bash
         run: |
           set +e
-          docker run --rm \
-            -v "${PWD}:/work" \
-            -w /work \
-            aquasec/trivy:0.65.0 \
-            config \
+          trivy config \
             --quiet \
             --severity CRITICAL,HIGH \
             --format sarif \
@@ -92,7 +118,23 @@ jobs:
             context: ./libretto
             image: symphony-go/libretto:ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Trivy CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.69.3"
+          archive="trivy_${version}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${version}"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "$base_url/$archive"
+          curl -fsSL -o "$RUNNER_TEMP/trivy-checksums.txt" "$base_url/trivy_${version}_checksums.txt"
+          checksum=$(awk '/  '"$archive"'$/ { print $1 }' "$RUNNER_TEMP/trivy-checksums.txt")
+          test -n "$checksum"
+          echo "$checksum  $RUNNER_TEMP/$archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/trivy-bin" trivy
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
 
       - name: Build ${{ matrix.name }} image
         run: docker build -t ${{ matrix.image }} ${{ matrix.context }}
@@ -102,12 +144,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "${PWD}:/work" \
-            -w /work \
-            aquasec/trivy:0.65.0 \
-            image \
+          trivy image \
             --ignore-unfixed \
             --severity CRITICAL,HIGH \
             --format sarif \

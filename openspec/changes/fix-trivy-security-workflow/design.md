@@ -6,7 +6,7 @@ Trivy's real exit code while still uploading SARIF when available.
 
 ## Decisions
 
-- Use `aquasecurity/setup-trivy` to install the CLI explicitly.
+- Install the latest safe Trivy CLI directly from the GitHub release asset and checksum.
 - Run `trivy fs`, `trivy config`, and `trivy image` directly in shell steps.
 - Capture the Trivy exit status to `GITHUB_OUTPUT`, upload SARIF conditionally, and fail after
   upload.
