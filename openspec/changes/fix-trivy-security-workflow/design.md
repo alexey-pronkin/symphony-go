@@ -6,7 +6,7 @@ Trivy's real exit code while still uploading SARIF when available.
 
 ## Decisions
 
-- Install a pinned Trivy CLI directly from the GitHub release asset and checksum.
+- Install the latest safe Trivy CLI directly from the GitHub release asset and checksum.
 - Run `trivy fs`, `trivy config`, and `trivy image` directly in shell steps.
 - Capture the Trivy exit status to `GITHUB_OUTPUT`, upload SARIF conditionally, and fail after
   upload.
