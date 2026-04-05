@@ -205,6 +205,8 @@ func TestHasMultipleOperations(t *testing.T) {
 		{"query and mutation", "query Foo { id } mutation Bar { id }", true},
 		{"keyword in string literal", `query Foo { description(text: "mutation inside") }`, false},
 		{"keyword in line comment", "# mutation comment\nquery Foo { id }", false},
+		{"two queries with leading comment", "# note\nquery Foo { id } query Bar { id }", true},
+		{"two queries with inline comment", "query Foo { id } # note\nquery Bar { id }", true},
 		{"queryCount field is not keyword", "query Foo { queryCount }", false},
 		{"mutationResult field is not keyword", "mutation Foo { mutationResult { id } }", false},
 		{"query alias is not extra operation", "query Viewer { query: viewer { id } }", false},
