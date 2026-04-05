@@ -81,7 +81,12 @@ func (c Client) FetchStatesByIDs(ctx context.Context, ids []string) ([]Issue, er
 	return parseIssues(payload)
 }
 
-func (c Client) query(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+// RawQuery executes a GraphQL request and returns the full decoded response payload.
+// Unlike query(), it does NOT treat GraphQL errors in the body as a failure — the
+// caller receives the full payload and can inspect payload["errors"] itself.
+// Only transport-level failures (network errors, non-200 HTTP status, decode failures)
+// return a non-nil error.
+func (c Client) RawQuery(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
 	client := c.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
@@ -122,10 +127,17 @@ func (c Client) query(ctx context.Context, query string, variables map[string]an
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, &Error{Kind: ErrLinearUnknownPayload, Message: "decode response", Cause: err}
 	}
+	return payload, nil
+}
+
+func (c Client) query(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	payload, err := c.RawQuery(ctx, query, variables)
+	if err != nil {
+		return nil, err
+	}
 	if errs, ok := payload["errors"]; ok && errs != nil {
 		return nil, &Error{Kind: ErrLinearGraphQLErrors, Message: "graphql errors returned"}
 	}
-
 	return payload, nil
 }
 

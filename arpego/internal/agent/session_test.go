@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -513,4 +515,150 @@ func parseJSONLine(t *testing.T, line string) map[string]any {
 		t.Fatalf("Unmarshal(%q): %v", line, err)
 	}
 	return payload
+}
+
+func TestSessionLinearGraphQLToolCallSuccess(t *testing.T) {
+	// Fake Linear GraphQL API.
+	gqlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"id":"user-1"}}}`))
+	}))
+	defer gqlSrv.Close()
+
+	workspace := t.TempDir()
+	logPath := filepath.Join(workspace, "tool_result.log")
+	script := writeScript(t, workspace, `
+set -eu
+log_file="$APP_LOG"
+while IFS= read -r line; do
+  method=$(printf '%s' "$line" | sed -n 's/.*"method":"\([^"]*\)".*/\1/p')
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$method" in
+    initialize)
+      printf '{"id":%s,"result":{"protocolVersion":"2026-01-01"}}\n' "$id"
+      ;;
+    initialized)
+      ;;
+    thread/start)
+      printf '{"id":%s,"result":{"thread":{"id":"thread-1"}}}\n' "$id"
+      ;;
+    turn/start)
+      printf '{"id":%s,"result":{"turn":{"id":"turn-1"}}}\n' "$id"
+      printf '{"id":77,"method":"item/tool/call","params":{"tool":"linear_graphql","arguments":{"query":"query { viewer { id } }"}}}\n'
+      IFS= read -r tool_result
+      printf '%s\n' "$tool_result" >> "$log_file"
+      printf '{"method":"turn/completed","params":{}}\n'
+      exit 0
+      ;;
+  esac
+done
+`)
+
+	cfg := config.New(map[string]any{
+		"codex": map[string]any{"command": "sh " + script},
+		"tracker": map[string]any{
+			"kind":     "linear",
+			"endpoint": gqlSrv.URL,
+			"api_key":  "test-key",
+		},
+	})
+
+	client, err := NewClient(
+		workspace,
+		cfg.CodexCommand(),
+		WithEnv(append(os.Environ(), "APP_LOG="+logPath)),
+		WithReadTimeout(500*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	sess := NewSession(client, cfg)
+	_, err = sess.Start(context.Background(), StartParams{WorkspacePath: workspace, Prompt: "Test", Title: "Test"})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_, err = sess.Run(context.Background(), func(Event) {})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	toolResp := parseJSONLine(t, readFile(t, logPath))
+	result, _ := toolResp["result"].(map[string]any)
+	if result == nil {
+		t.Fatalf("expected result field, got: %#v", toolResp)
+	}
+	if success, _ := result["success"].(bool); !success {
+		t.Fatalf("linear_graphql tool call should succeed, got: %#v", result)
+	}
+	if _, hasData := result["data"]; !hasData {
+		t.Fatalf("expected data in successful result, got: %#v", result)
+	}
+}
+
+func TestSessionDynamicToolsAdvertisedWhenLinearConfigured(t *testing.T) {
+	workspace := t.TempDir()
+	logPath := filepath.Join(workspace, "thread_start.log")
+	script := writeScript(t, workspace, `
+set -eu
+log_file="$APP_LOG"
+while IFS= read -r line; do
+  method=$(printf '%s' "$line" | sed -n 's/.*"method":"\([^"]*\)".*/\1/p')
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$method" in
+    initialize)
+      printf '{"id":%s,"result":{}}\n' "$id"
+      ;;
+    initialized)
+      ;;
+    thread/start)
+      printf '%s\n' "$line" >> "$log_file"
+      printf '{"id":%s,"result":{"thread":{"id":"thread-1"}}}\n' "$id"
+      ;;
+    turn/start)
+      printf '{"id":%s,"result":{"turn":{"id":"turn-1"}}}\n' "$id"
+      printf '{"method":"turn/completed","params":{}}\n'
+      exit 0
+      ;;
+  esac
+done
+`)
+
+	cfg := config.New(map[string]any{
+		"codex":   map[string]any{"command": "sh " + script},
+		"tracker": map[string]any{"kind": "linear", "api_key": "test-key"},
+	})
+
+	client, err := NewClient(
+		workspace,
+		cfg.CodexCommand(),
+		WithEnv(append(os.Environ(), "APP_LOG="+logPath)),
+		WithReadTimeout(500*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	sess := NewSession(client, cfg)
+	_, err = sess.Start(context.Background(), StartParams{WorkspacePath: workspace, Prompt: "Test", Title: "Test"})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_, err = sess.Run(context.Background(), func(Event) {})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	threadStart := parseJSONLine(t, readFile(t, logPath))
+	params, _ := threadStart["params"].(map[string]any)
+	tools, _ := params["dynamicTools"].([]any)
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 dynamic tool when linear configured, got %d: %#v", len(tools), tools)
+	}
+	tool, _ := tools[0].(map[string]any)
+	if tool["name"] != "linear_graphql" {
+		t.Fatalf("expected tool name linear_graphql, got: %#v", tool["name"])
+	}
 }
