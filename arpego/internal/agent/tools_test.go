@@ -230,6 +230,7 @@ func TestHasMultipleOperations(t *testing.T) {
 		{"query alias is not extra operation", "query Viewer { query: viewer { id } }", false},
 		{"mutation field is not extra operation", "query Viewer { mutation }", false},
 		{"introspection sibling queryType field", "query { __schema { mutationType { name } queryType { name } } }", false},
+		{"fragment body queryCount field", "query Q { viewer { ...F } } fragment F on Viewer { teams { nodes { id } } queryCount: id }", false},
 		{"fragment only", "fragment ViewerFields on Viewer { id }", false},
 		{"comment only", "# just a comment\n# still no operation", false},
 		{"empty string", "", false},

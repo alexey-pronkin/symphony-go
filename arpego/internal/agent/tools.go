@@ -117,6 +117,7 @@ func countGraphQLOperations(q string) int {
 	count := 0
 	depth := 0
 	pendingExplicit := false
+	pendingFragment := false
 	for i := 0; i < len(sanitized); i++ {
 		ch := sanitized[i]
 		before := prevNonSpaceIndex(sanitized, i-1)
@@ -129,10 +130,11 @@ func countGraphQLOperations(q string) int {
 			}
 			continue
 		}
-		if pendingExplicit {
+		if pendingExplicit || pendingFragment {
 			if ch == '{' {
 				depth = 1
 				pendingExplicit = false
+				pendingFragment = false
 			}
 			continue
 		}
@@ -140,6 +142,16 @@ func countGraphQLOperations(q string) int {
 			count++
 			depth = 1
 			continue
+		}
+		if strings.HasPrefix(sanitized[i:], "fragment") {
+			after := nextNonSpaceIndex(sanitized, i+len("fragment"))
+			beforeOK := before < 0 || sanitized[before] == '}'
+			afterOK := after < len(sanitized) && isIdentRune(sanitized[after])
+			if beforeOK && afterOK {
+				pendingFragment = true
+				i += len("fragment") - 1
+				continue
+			}
 		}
 		for _, kw := range []string{"query", "mutation", "subscription"} {
 			if strings.HasPrefix(sanitized[i:], kw) {
