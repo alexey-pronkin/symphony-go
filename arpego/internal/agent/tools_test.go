@@ -54,6 +54,22 @@ func TestExecuteLinearGraphQLRejectsMultipleOperations(t *testing.T) {
 	assertToolCallError(t, result, "exactly one GraphQL operation")
 }
 
+func TestExecuteLinearGraphQLRejectsFragmentOnlyDocument(t *testing.T) {
+	s := sessionWithConfig(linearCfg("https://linear.invalid", "key"))
+	result := s.executeLinearGraphQL(context.Background(), toolMsg(map[string]any{
+		"query": "fragment ViewerFields on Viewer { id }",
+	}))
+	assertToolCallError(t, result, "exactly one GraphQL operation")
+}
+
+func TestExecuteLinearGraphQLRejectsCommentOnlyDocument(t *testing.T) {
+	s := sessionWithConfig(linearCfg("https://linear.invalid", "key"))
+	result := s.executeLinearGraphQL(context.Background(), toolMsg(map[string]any{
+		"query": "# just a comment\n# still no operation",
+	}))
+	assertToolCallError(t, result, "exactly one GraphQL operation")
+}
+
 func TestExecuteLinearGraphQLRejectsNonObjectVariables(t *testing.T) {
 	s := sessionWithConfig(linearCfg("https://linear.invalid", "key"))
 	result := s.executeLinearGraphQL(context.Background(), toolMsg(map[string]any{
@@ -213,6 +229,8 @@ func TestHasMultipleOperations(t *testing.T) {
 		{"mutationResult field is not keyword", "mutation Foo { mutationResult { id } }", false},
 		{"query alias is not extra operation", "query Viewer { query: viewer { id } }", false},
 		{"mutation field is not extra operation", "query Viewer { mutation }", false},
+		{"fragment only", "fragment ViewerFields on Viewer { id }", false},
+		{"comment only", "# just a comment\n# still no operation", false},
 		{"empty string", "", false},
 	}
 	for _, tc := range cases {
