@@ -67,9 +67,9 @@ func (s *Session) executeLinearGraphQL(ctx context.Context, msg Response) map[st
 		return toolCallError("query must be a non-empty string")
 	}
 
-	// Reject documents with multiple operations; Linear will also reject them, but
-	// catching it early gives a cleaner error message.
-	if hasMultipleOperations(rawQuery) {
+	// Reject documents that do not contain exactly one operation; Linear will also
+	// reject them, but catching it early gives a cleaner error message.
+	if countGraphQLOperations(rawQuery) != 1 {
 		return toolCallError("query must contain exactly one GraphQL operation")
 	}
 
@@ -105,20 +105,20 @@ func (s *Session) executeLinearGraphQL(ctx context.Context, msg Response) map[st
 	return map[string]any{"success": true, "data": payload}
 }
 
-// hasMultipleOperations reports whether q appears to contain more than one
-// GraphQL operation definition. This is a conservative heuristic — it strips
-// comments and string literals before scanning for operation keywords.
-// Linear's API server is the authoritative validator; this check is defense-in-depth.
-func hasMultipleOperations(q string) bool {
+// countGraphQLOperations returns the number of GraphQL operations in q using a
+
+// lightweight scan that strips comments and string literals first. This is
+
+// defense-in-depth for the extension contract; Linear remains the authoritative
+
+// parser.
+func countGraphQLOperations(q string) int {
 	sanitized := sanitizeGraphQLForOperationScan(q)
 	count := 0
 	for i := 0; i < len(sanitized); i++ {
 		before := prevNonSpaceIndex(sanitized, i-1)
 		if sanitized[i] == '{' && (before < 0 || sanitized[before] == '}') {
 			count++
-			if count > 1 {
-				return true
-			}
 			continue
 		}
 		matched := false
@@ -132,9 +132,6 @@ func hasMultipleOperations(q string) bool {
 				afterOK := after < len(sanitized) && (sanitized[after] == '{' || sanitized[after] == '@' || isIdentRune(sanitized[after]))
 				if beforeOK && afterOK {
 					count++
-					if count > 1 {
-						return true
-					}
 					i += len(kw) - 1
 					matched = true
 					break
@@ -145,7 +142,11 @@ func hasMultipleOperations(q string) bool {
 			continue
 		}
 	}
-	return false
+	return count
+}
+
+func hasMultipleOperations(q string) bool {
+	return countGraphQLOperations(q) > 1
 }
 
 func sanitizeGraphQLForOperationScan(q string) string {
