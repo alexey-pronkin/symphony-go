@@ -117,6 +117,7 @@ func countGraphQLOperations(q string) int {
 	count := 0
 	depth := 0
 	pendingExplicit := false
+	pendingExplicitParens := 0
 	pendingFragment := false
 	for i := 0; i < len(sanitized); i++ {
 		ch := sanitized[i]
@@ -130,10 +131,25 @@ func countGraphQLOperations(q string) int {
 			}
 			continue
 		}
-		if pendingExplicit || pendingFragment {
+		if pendingExplicit {
+			switch ch {
+			case '(':
+				pendingExplicitParens++
+			case ')':
+				if pendingExplicitParens > 0 {
+					pendingExplicitParens--
+				}
+			case '{':
+				if pendingExplicitParens == 0 {
+					depth = 1
+					pendingExplicit = false
+				}
+			}
+			continue
+		}
+		if pendingFragment {
 			if ch == '{' {
 				depth = 1
-				pendingExplicit = false
 				pendingFragment = false
 			}
 			continue
@@ -161,6 +177,7 @@ func countGraphQLOperations(q string) int {
 				if beforeOK && afterOK {
 					count++
 					pendingExplicit = true
+					pendingExplicitParens = 0
 					i += len(kw) - 1
 					break
 				}
