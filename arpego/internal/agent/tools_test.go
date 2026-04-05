@@ -131,6 +131,26 @@ func TestExecuteLinearGraphQLPreservesGraphQLErrors(t *testing.T) {
 	}
 }
 
+func TestExecuteLinearGraphQLEmptyErrorsArrayIsSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"errors":[],"data":{"viewer":{"id":"user-1"}}}`))
+	}))
+	defer srv.Close()
+
+	s := sessionWithConfig(linearCfg(srv.URL, "key"))
+	result := s.executeLinearGraphQL(context.Background(), toolMsg(map[string]any{
+		"query": "query { viewer { id } }",
+	}))
+
+	if success, _ := result["success"].(bool); !success {
+		t.Fatalf("expected success=true for empty errors array, got: %#v", result)
+	}
+	if _, hasError := result["error"]; hasError {
+		t.Fatalf("expected no transport error for empty errors array, got: %#v", result)
+	}
+}
+
 func TestExecuteLinearGraphQLTransportError(t *testing.T) {
 	// Port 0 never accepts connections.
 	s := sessionWithConfig(linearCfg("http://127.0.0.1:0", "key"))
@@ -187,6 +207,8 @@ func TestHasMultipleOperations(t *testing.T) {
 		{"keyword in line comment", "# mutation comment\nquery Foo { id }", false},
 		{"queryCount field is not keyword", "query Foo { queryCount }", false},
 		{"mutationResult field is not keyword", "mutation Foo { mutationResult { id } }", false},
+		{"query alias is not extra operation", "query Viewer { query: viewer { id } }", false},
+		{"mutation field is not extra operation", "query Viewer { mutation }", false},
 		{"empty string", "", false},
 	}
 	for _, tc := range cases {
