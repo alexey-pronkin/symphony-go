@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # v0.2.6
         with:
-          version: v0.65.0
+          version: v0.68.2
           cache: true
 
       - name: Trivy repo scan
@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # v0.2.6
         with:
-          version: v0.65.0
+          version: v0.68.2
           cache: true
 
       - name: Trivy config scan
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # v0.2.6
         with:
-          version: v0.65.0
+          version: v0.68.2
           cache: true
 
       - name: Build ${{ matrix.name }} image
