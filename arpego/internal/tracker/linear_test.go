@@ -250,3 +250,69 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
+
+func TestRawQueryReturnsFullPayloadIncludingGraphQLErrors(t *testing.T) {
+	// RawQuery must return the full payload even when errors are present;
+	// the caller decides what to do with them.
+	client := tracker.Client{
+		Endpoint: "https://linear.invalid/graphql",
+		APIKey:   "test-key",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				return jsonResponse(t, http.StatusOK, map[string]any{
+					"errors": []any{map[string]any{"message": "not found"}},
+					"data":   nil,
+				}), nil
+			}),
+		},
+	}
+
+	payload, err := client.RawQuery(context.Background(), "query { viewer { id } }", nil)
+	if err != nil {
+		t.Fatalf("RawQuery returned unexpected error: %v", err)
+	}
+	if _, ok := payload["errors"]; !ok {
+		t.Fatalf("RawQuery dropped errors field from payload: %#v", payload)
+	}
+}
+
+func TestRawQueryReturnsPayloadOnSuccess(t *testing.T) {
+	client := tracker.Client{
+		Endpoint: "https://linear.invalid/graphql",
+		APIKey:   "test-key",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if got := r.Header.Get("Authorization"); got != "test-key" {
+					t.Errorf("authorization header = %q", got)
+				}
+				return jsonResponse(t, http.StatusOK, map[string]any{
+					"data": map[string]any{"viewer": map[string]any{"id": "u-1"}},
+				}), nil
+			}),
+		},
+	}
+
+	payload, err := client.RawQuery(context.Background(), "query { viewer { id } }", nil)
+	if err != nil {
+		t.Fatalf("RawQuery error: %v", err)
+	}
+	data, _ := payload["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("missing data in payload: %#v", payload)
+	}
+}
+
+func TestRawQueryFailsOnNon200Status(t *testing.T) {
+	client := tracker.Client{
+		Endpoint: "https://linear.invalid/graphql",
+		APIKey:   "test-key",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				return jsonResponse(t, http.StatusUnauthorized, map[string]any{"error": "unauthorized"}), nil
+			}),
+		},
+	}
+
+	_, err := client.RawQuery(context.Background(), "query { viewer { id } }", nil)
+	assertErrorKind(t, err, tracker.ErrLinearAPIStatus)
+}
