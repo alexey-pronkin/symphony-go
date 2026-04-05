@@ -219,6 +219,7 @@ func TestHasMultipleOperations(t *testing.T) {
 		{"shorthand query", "{ viewer { id } }", false},
 		{"anonymous then explicit operation", "{ viewer { id } } mutation Update { viewer { id } }", true},
 		{"two anonymous operations", "{ viewer { id } } { teams { nodes { id } } }", true},
+		{"query with variable default object then second op", "query Foo($f: Filter = { archived: false }) { viewer { id } } query Bar { id }", true},
 		{"two queries", "query Foo { id } query Bar { id }", true},
 		{"query and mutation", "query Foo { id } mutation Bar { id }", true},
 		{"keyword in string literal", `query Foo { description(text: "mutation inside") }`, false},
