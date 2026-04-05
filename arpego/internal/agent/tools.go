@@ -113,10 +113,17 @@ func hasMultipleOperations(q string) bool {
 	sanitized := sanitizeGraphQLForOperationScan(q)
 	count := 0
 	for i := 0; i < len(sanitized); i++ {
+		before := prevNonSpaceIndex(sanitized, i-1)
+		if sanitized[i] == '{' && (before < 0 || sanitized[before] == '}') {
+			count++
+			if count > 1 {
+				return true
+			}
+			continue
+		}
 		matched := false
 		for _, kw := range []string{"query", "mutation", "subscription"} {
 			if strings.HasPrefix(sanitized[i:], kw) {
-				before := prevNonSpaceIndex(sanitized, i-1)
 				after := nextNonSpaceIndex(sanitized, i+len(kw))
 				// Count only explicit operation definitions, not field names or aliases
 				// inside a selection set. Valid operation keywords appear at the start
