@@ -9,7 +9,7 @@ needs a deterministic Trivy invocation path for repo, config, and image scans.
 - Replace the Trivy action wrapper with explicit Trivy CLI invocations in GitHub Actions.
 - Upload SARIF only when a scan output file exists.
 - Fail the job on Trivy findings or scanner errors after artifact handling.
-- Pin the Trivy setup action and CLI version to the currently documented release.
+- Pin the Trivy release asset/checksum source and CLI version to the documented release.
 
 ## Capabilities
 
