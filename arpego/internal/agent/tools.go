@@ -105,41 +105,54 @@ func (s *Session) executeLinearGraphQL(ctx context.Context, msg Response) map[st
 	return map[string]any{"success": true, "data": payload}
 }
 
-// countGraphQLOperations returns the number of GraphQL operations in q using a
+// countGraphQLOperations returns the number of top-level GraphQL operations in q.
+// It strips comments and string literals first, then counts only top-level
 
-// lightweight scan that strips comments and string literals first. This is
+// anonymous operations (`{ ... }`) and explicit operation definitions.
+// This is defense-in-depth for the extension contract; Linear remains the
 
-// defense-in-depth for the extension contract; Linear remains the authoritative
-
-// parser.
+// authoritative parser.
 func countGraphQLOperations(q string) int {
 	sanitized := sanitizeGraphQLForOperationScan(q)
 	count := 0
+	depth := 0
+	pendingExplicit := false
 	for i := 0; i < len(sanitized); i++ {
+		ch := sanitized[i]
 		before := prevNonSpaceIndex(sanitized, i-1)
-		if sanitized[i] == '{' && (before < 0 || sanitized[before] == '}') {
-			count++
+		if depth > 0 {
+			switch ch {
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
 			continue
 		}
-		matched := false
+		if pendingExplicit {
+			if ch == '{' {
+				depth = 1
+				pendingExplicit = false
+			}
+			continue
+		}
+		if ch == '{' && (before < 0 || sanitized[before] == '}') {
+			count++
+			depth = 1
+			continue
+		}
 		for _, kw := range []string{"query", "mutation", "subscription"} {
 			if strings.HasPrefix(sanitized[i:], kw) {
 				after := nextNonSpaceIndex(sanitized, i+len(kw))
-				// Count only explicit operation definitions, not field names or aliases
-				// inside a selection set. Valid operation keywords appear at the start
-				// of the document or after a completed operation body.
 				beforeOK := before < 0 || sanitized[before] == '}'
 				afterOK := after < len(sanitized) && (sanitized[after] == '{' || sanitized[after] == '@' || isIdentRune(sanitized[after]))
 				if beforeOK && afterOK {
 					count++
+					pendingExplicit = true
 					i += len(kw) - 1
-					matched = true
 					break
 				}
 			}
-		}
-		if matched {
-			continue
 		}
 	}
 	return count
