@@ -110,67 +110,85 @@ func (s *Session) executeLinearGraphQL(ctx context.Context, msg Response) map[st
 // comments and string literals before scanning for operation keywords.
 // Linear's API server is the authoritative validator; this check is defense-in-depth.
 func hasMultipleOperations(q string) bool {
+	sanitized := sanitizeGraphQLForOperationScan(q)
 	count := 0
-	i := 0
-	for i < len(q) {
-		// Line comment: skip to end of line.
-		if q[i] == '#' {
-			for i < len(q) && q[i] != '\n' {
-				i++
-			}
-			continue
-		}
-		// Block string: """ ... """
-		if i+2 < len(q) && q[i] == '"' && q[i+1] == '"' && q[i+2] == '"' {
-			i += 3
-			for i+2 < len(q) {
-				if q[i] == '"' && q[i+1] == '"' && q[i+2] == '"' {
-					i += 3
-					break
-				}
-				i++
-			}
-			continue
-		}
-		// Regular string: skip escaped chars.
-		if q[i] == '"' {
-			i++
-			for i < len(q) && q[i] != '"' {
-				if q[i] == '\\' {
-					i++
-				}
-				i++
-			}
-			i++ // closing "
-			continue
-		}
-		// Scan for operation keywords.
+	for i := 0; i < len(sanitized); i++ {
 		matched := false
 		for _, kw := range []string{"query", "mutation", "subscription"} {
-			if strings.HasPrefix(q[i:], kw) {
-				before := prevNonSpaceIndex(q, i-1)
-				after := nextNonSpaceIndex(q, i+len(kw))
+			if strings.HasPrefix(sanitized[i:], kw) {
+				before := prevNonSpaceIndex(sanitized, i-1)
+				after := nextNonSpaceIndex(sanitized, i+len(kw))
 				// Count only explicit operation definitions, not field names or aliases
 				// inside a selection set. Valid operation keywords appear at the start
 				// of the document or after a completed operation body.
-				beforeOK := before < 0 || q[before] == '}'
-				afterOK := after < len(q) && (q[after] == '{' || q[after] == '@' || isIdentRune(q[after]))
+				beforeOK := before < 0 || sanitized[before] == '}'
+				afterOK := after < len(sanitized) && (sanitized[after] == '{' || sanitized[after] == '@' || isIdentRune(sanitized[after]))
 				if beforeOK && afterOK {
 					count++
 					if count > 1 {
 						return true
 					}
-					i += len(kw)
+					i += len(kw) - 1
 					matched = true
 					break
 				}
 			}
 		}
-		if !matched {
-			i++
+		if matched {
+			continue
 		}
 	}
 	return false
+}
+
+func sanitizeGraphQLForOperationScan(q string) string {
+	buf := []byte(q)
+	for i := 0; i < len(buf); i++ {
+		if buf[i] == '#' {
+			for i < len(buf) && buf[i] != '\n' {
+				buf[i] = ' '
+				i++
+			}
+			if i < len(buf) {
+				buf[i] = ' '
+			}
+			continue
+		}
+		if i+2 < len(buf) && buf[i] == '"' && buf[i+1] == '"' && buf[i+2] == '"' {
+			buf[i], buf[i+1], buf[i+2] = ' ', ' ', ' '
+			i += 3
+			for i+2 < len(buf) {
+				if buf[i] == '"' && buf[i+1] == '"' && buf[i+2] == '"' {
+					buf[i], buf[i+1], buf[i+2] = ' ', ' ', ' '
+					i += 2
+					break
+				}
+				buf[i] = ' '
+				i++
+			}
+			continue
+		}
+		if buf[i] == '"' {
+			buf[i] = ' '
+			i++
+			for i < len(buf) && buf[i] != '"' {
+				if buf[i] == '\\' {
+					buf[i] = ' '
+					i++
+					if i < len(buf) {
+						buf[i] = ' '
+					}
+					continue
+				}
+				buf[i] = ' '
+				i++
+			}
+			if i < len(buf) {
+				buf[i] = ' '
+			}
+		}
+	}
+	return string(buf)
 }
 
 func prevNonSpaceIndex(q string, i int) int {
