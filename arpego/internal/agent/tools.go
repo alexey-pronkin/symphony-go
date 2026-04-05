@@ -99,7 +99,7 @@ func (s *Session) executeLinearGraphQL(ctx context.Context, msg Response) map[st
 	}
 
 	// Preserve full body on GraphQL errors so the agent can inspect them.
-	if errs, ok := payload["errors"]; ok && errs != nil {
+	if hasGraphQLErrors(payload) {
 		return map[string]any{"success": false, "data": payload}
 	}
 	return map[string]any{"success": true, "data": payload}
@@ -148,10 +148,14 @@ func hasMultipleOperations(q string) bool {
 		matched := false
 		for _, kw := range []string{"query", "mutation", "subscription"} {
 			if strings.HasPrefix(q[i:], kw) {
-				after := i + len(kw)
-				// Keyword must be followed by a non-identifier character (or end of string)
-				// to distinguish it from field names like "queryCount".
-				if after >= len(q) || !isIdentRune(q[after]) {
+				before := prevNonSpaceIndex(q, i-1)
+				after := nextNonSpaceIndex(q, i+len(kw))
+				// Count only explicit operation definitions, not field names or aliases
+				// inside a selection set. Valid operation keywords appear at the start
+				// of the document or after a completed operation body.
+				beforeOK := before < 0 || q[before] == '}'
+				afterOK := after < len(q) && (q[after] == '{' || q[after] == '@' || isIdentRune(q[after]))
+				if beforeOK && afterOK {
 					count++
 					if count > 1 {
 						return true
@@ -169,9 +173,41 @@ func hasMultipleOperations(q string) bool {
 	return false
 }
 
+func prevNonSpaceIndex(q string, i int) int {
+	for i >= 0 {
+		if q[i] != ' ' && q[i] != '\t' && q[i] != '\n' && q[i] != '\r' && q[i] != ',' {
+			return i
+		}
+		i--
+	}
+	return -1
+}
+
+func nextNonSpaceIndex(q string, i int) int {
+	for i < len(q) {
+		if q[i] != ' ' && q[i] != '\t' && q[i] != '\n' && q[i] != '\r' && q[i] != ',' {
+			return i
+		}
+		i++
+	}
+	return len(q)
+}
+
 // isIdentRune reports whether b is a valid GraphQL identifier continuation byte.
 func isIdentRune(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
+func hasGraphQLErrors(payload map[string]any) bool {
+	errors, ok := payload["errors"]
+	if !ok || errors == nil {
+		return false
+	}
+	items, ok := errors.([]any)
+	if !ok {
+		return true
+	}
+	return len(items) > 0
 }
 
 func toolCallError(msg string) map[string]any {
