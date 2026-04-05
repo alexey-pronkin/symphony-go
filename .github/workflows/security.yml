@@ -11,21 +11,23 @@ permissions:
   contents: read
   security-events: write
 
+
 jobs:
   repo-scan:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # v0.2.6
+        with:
+          version: v0.65.0
+          cache: true
+
       - name: Trivy repo scan
         id: repo_scan
         shell: bash
         run: |
           set +e
-          docker run --rm \
-            -v "${PWD}:/work" \
-            -w /work \
-            aquasec/trivy:0.65.0 \
-            fs \
+          trivy fs \
             --config trivy.yaml \
             --format sarif \
             --output trivy-repo.sarif \
@@ -49,16 +51,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # v0.2.6
+        with:
+          version: v0.65.0
+          cache: true
+
       - name: Trivy config scan
         id: config_scan
         shell: bash
         run: |
           set +e
-          docker run --rm \
-            -v "${PWD}:/work" \
-            -w /work \
-            aquasec/trivy:0.65.0 \
-            config \
+          trivy config \
             --quiet \
             --severity CRITICAL,HIGH \
             --format sarif \
@@ -93,6 +96,10 @@ jobs:
             image: symphony-go/libretto:ci
     steps:
       - uses: actions/checkout@v4
+      - uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241 # v0.2.6
+        with:
+          version: v0.65.0
+          cache: true
 
       - name: Build ${{ matrix.name }} image
         run: docker build -t ${{ matrix.image }} ${{ matrix.context }}
@@ -102,12 +109,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "${PWD}:/work" \
-            -w /work \
-            aquasec/trivy:0.65.0 \
-            image \
+          trivy image \
             --ignore-unfixed \
             --severity CRITICAL,HIGH \
             --format sarif \
