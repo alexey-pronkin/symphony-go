@@ -27,7 +27,7 @@ Register the MCP servers from the repo root:
 
 ```bash
 codex mcp add context7 -- npx -y @upstash/context7-mcp --api-key ctx7sk-7e41a386-8a46-4bc6-8f74-ac1ad0381f19
-codex mcp add firecrawl-mcp --env FIRECRAWL_API_KEY=fc-REDACTED -- npx -y firecrawl-mcp
+codex mcp add firecrawl-mcp --env FIRECRAWL_API_KEY="$FIRECRAWL_API_KEY" -- npx -y firecrawl-mcp
 codex mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
 codex mcp add basic-memory -- uvx basic-memory mcp
 codex mcp add playwright -- npx @playwright/mcp@latest
